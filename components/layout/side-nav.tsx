@@ -18,11 +18,11 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { useRouter, usePathname } from "next/navigation"
-import { useI18n } from "@/lib/i18n/context"
+import { useI18n, TranslationKeys } from "@/lib/i18n/context"
 
 interface SidebarNavItem {
-  titleKey: string
-  descriptionKey: string
+  titleKey: TranslationKeys
+  descriptionKey: TranslationKeys
   href: string
   icon: React.ComponentType<{ className?: string }>
   adminOnly?: boolean
