@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Moon, Sun, Languages, Save } from "lucide-react"
-import { useI18n } from "@/lib/i18n/context"
+import { useI18n, TranslationKeys } from "@/lib/i18n/context"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useState } from "react"
 
@@ -55,7 +55,7 @@ const getErrorMessageKey = (message: string | undefined): TranslationKeys => {
     case "Please select your department":
       return "department-required";
     default:
-      return "required-field";
+      return "required-field" as TranslationKeys;
   }
 };
 

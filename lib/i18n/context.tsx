@@ -440,7 +440,7 @@ const translations = {
   }
 } as const
 
-type TranslationKeys = keyof typeof translations.ja;
+export type TranslationKeys = keyof typeof translations.ja;
 
 const I18nContext = createContext<I18nContextType | null>(null);
 
