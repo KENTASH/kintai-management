@@ -10,6 +10,9 @@ const inter = Inter({ subsets: ['latin'] });
 export const metadata: Metadata = {
   title: '勤怠管理システム',
   description: 'NIS Attendance Management System',
+  icons: {
+    icon: '/favicon.ico',
+  },
 };
 
 export default function RootLayout({

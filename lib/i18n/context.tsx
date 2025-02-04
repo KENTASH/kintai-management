@@ -214,6 +214,15 @@ const translations = {
     "member-list-description": "システムユーザーの一覧を表示します",
     "member-search": "メンバー検索",
     "member-search-description": "メンバーを検索します",
+
+    // Form Validation Messages
+    "required-field": "この項目は必須です",
+    "invalid-email": "有効なメールアドレスを入力してください",
+    "last-name-en-required": "姓（英語）は必須です",
+    "first-name-en-required": "名（英語）は必須です",
+    "department-required": "所属を選択してください",
+    "employee-id-required": "社員番号は必須です",
+    "name-required": "氏名は必須です",
   },
   en: {
     // App Title
@@ -418,7 +427,16 @@ const translations = {
     "Attendance-Types-early-leave": "Early Leave",
     "delay": "Delay",
     "shift": "Shift",
-    "business-holiday": "Business Holiday"
+    "business-holiday": "Business Holiday",
+
+    // Form Validation Messages
+    "required-field": "This field is required",
+    "invalid-email": "Please enter a valid email address",
+    "last-name-en-required": "Last name (English) is required",
+    "first-name-en-required": "First name (English) is required",
+    "department-required": "Please select your department",
+    "employee-id-required": "Employee ID is required",
+    "name-required": "Name is required",
   }
 } as const
 

@@ -42,6 +42,23 @@ const departments = [
   "GRS大阪", "GRS名古屋", "GRS東京", "NAL名古屋",
 ]
 
+// エラーメッセージをTranslationKeysにマッピングする関数
+const getErrorMessageKey = (message: string | undefined): TranslationKeys => {
+  switch (message) {
+    case "姓（英語）は必須です":
+    case "Last name (English) is required":
+      return "last-name-en-required";
+    case "名（英語）は必須です":
+    case "First name (English) is required":
+      return "first-name-en-required";
+    case "所属を選択してください":
+    case "Please select your department":
+      return "department-required";
+    default:
+      return "required-field";
+  }
+};
+
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme()
   const { language, setLanguage, t } = useI18n()
@@ -180,7 +197,11 @@ export default function SettingsPage() {
                               <FormControl>
                                 <Input {...field} placeholder="e.g., Shinma" />
                               </FormControl>
-                              <FormMessage>{t(form.formState.errors.lastNameEn?.message || "")}</FormMessage>
+                              <FormMessage>
+                                {form.formState.errors.lastNameEn?.message ? 
+                                  t(getErrorMessageKey(form.formState.errors.lastNameEn.message)) 
+                                  : ""}
+                              </FormMessage>
                             </div>
                           </FormItem>
                         )}
@@ -196,7 +217,11 @@ export default function SettingsPage() {
                               <FormControl>
                                 <Input {...field} placeholder="e.g., Kenta" />
                               </FormControl>
-                              <FormMessage>{t(form.formState.errors.firstNameEn?.message || "")}</FormMessage>
+                              <FormMessage>
+                                {form.formState.errors.firstNameEn?.message ? 
+                                  t(getErrorMessageKey(form.formState.errors.firstNameEn.message)) 
+                                  : ""}
+                              </FormMessage>
                             </div>
                           </FormItem>
                         )}
@@ -235,7 +260,11 @@ export default function SettingsPage() {
                               ))}
                             </SelectContent>
                           </Select>
-                          <FormMessage>{t(form.formState.errors.department?.message || "")}</FormMessage>
+                          <FormMessage>
+                            {form.formState.errors.department?.message ? 
+                              t(getErrorMessageKey(form.formState.errors.department.message)) 
+                              : ""}
+                          </FormMessage>
                         </div>
                       </FormItem>
                     )}
