@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from 'react'
+import { usePathname } from 'next/navigation'
 import { MainNav } from './main-nav'
 import { SideNav } from './side-nav'
 import { UserNav } from './user-nav'
@@ -8,10 +9,17 @@ import { UserNav } from './user-nav'
 export function MainLayout({ children }: { children: React.ReactNode }) {
   const [loginDate, setLoginDate] = useState('')
   const [isSidebarOpen, setSidebarOpen] = useState(true)
+  const pathname = usePathname()
+  const isLoginPage = pathname === "/"
+  const isAuthenticated = typeof window !== 'undefined' && document.cookie.includes('auth=true')
 
   useEffect(() => {
     setLoginDate(new Date().toLocaleString('ja-JP'))
   }, [])
+
+  if (isLoginPage && !isAuthenticated) {
+    return <div className="min-h-screen bg-blue-50 dark:bg-blue-950">{children}</div>
+  }
 
   return (
     <div className="min-h-screen bg-background">
