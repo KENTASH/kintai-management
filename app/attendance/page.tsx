@@ -14,6 +14,7 @@ import { useI18n } from "@/lib/i18n/context"
 // ダミーユーザーデータ
 const dummyUser = {
   employeeId: "1001",
+  department: "NISZ浜松",
   name: "管理者 テスト",
 }
 
@@ -236,6 +237,10 @@ export default function AttendancePage() {
                     <div>
                       <div className="text-sm text-muted-foreground">{t("employee-id")}</div>
                       <div className="font-medium">{dummyUser.employeeId}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-muted-foreground">{t("department")}</div>
+                      <div className="font-medium">{dummyUser.department}</div>
                     </div>
                     <div>
                       <div className="text-sm text-muted-foreground">{t("name")}</div>
