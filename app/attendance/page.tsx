@@ -13,8 +13,8 @@ import { useI18n } from "@/lib/i18n/context"
 
 // ダミーユーザーデータ
 const dummyUser = {
-  employeeId: "6096",
-  name: "新間 健太",
+  employeeId: "1001",
+  name: "管理者 テスト",
 }
 
 // 年の選択肢

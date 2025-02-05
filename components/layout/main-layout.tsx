@@ -35,7 +35,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
 
       <footer className="fixed bottom-0 left-0 right-0 z-[200] border-t py-1.5 bg-gradient-to-r from-blue-900 via-blue-600 to-blue-400">
         <div className="flex justify-between items-center px-4">
-          <div className="text-xs text-gray-200">© NIS HAMAMATSU 2025</div>
+          <div className="text-xs text-gray-200">© NISZ HAMAMATSU 2025</div>
           <div className="text-xs text-gray-200">{loginDate}</div>
         </div>
       </footer>

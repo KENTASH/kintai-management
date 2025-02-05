@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/dialog"
 
 const departments = [
-  "NIS浜松", "NIS名古屋", "NIS大阪", "NIS東京",
+  "NISZ浜松", "NISZ名古屋", "NISZ大阪", "NIS東京",
   "GRS大阪", "GRS名古屋", "GRS東京", "NAL名古屋",
 ]
 

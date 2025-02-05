@@ -28,17 +28,17 @@ const userFormSchema = z.object({
 })
 
 const defaultValues = {
-  employeeId: "6096",
-  lastName: "新間",
-  firstName: "健太",
-  lastNameEn: "Shinma",
-  firstNameEn: "Kenta",
-  email: "kenta.shinma@example.com",
-  department: "NIS浜松",
+  employeeId: "1001",
+  lastName: "管理者",
+  firstName: "テスト",
+  lastNameEn: "Kanrisha",
+  firstNameEn: "Test",
+  email: "test@example.com",
+  department: "NISZ浜松",
 }
 
 const departments = [
-  "NIS浜松", "NIS名古屋", "NIS大阪", "NIS東京",
+  "NISZ浜松", "NISZ名古屋", "NISZ大阪", "NIS東京",
   "GRS大阪", "GRS名古屋", "GRS東京", "NAL名古屋",
 ]
 

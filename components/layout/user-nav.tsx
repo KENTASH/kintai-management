@@ -42,6 +42,13 @@ const avatarSamples = [
   { id: 16, url: "https://api.dicebear.com/7.x/personas/svg?seed=Lucy" }
 ]
 
+const defaultUser = {
+  name: "管理者 テスト",
+  email: "test@example.com",
+  employeeId: "1001",
+  department: "NISZ浜松",
+}
+
 export function UserNav() {
   const { t } = useI18n()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -49,9 +56,9 @@ export function UserNav() {
 
   // Dummy user data
   const user = {
-    id: "6096",
-    name: "新間 健太",
-    department: "NIS浜松"
+    id: "1001",
+    name: "管理者 テスト",
+    department: "NISZ浜松"
   }
 
   return (
