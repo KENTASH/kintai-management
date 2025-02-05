@@ -21,21 +21,18 @@ export default function LoginPage() {
     setError("")
     setIsLoading(true)
 
-    // ダミー認証
     if (email === "test@example.com" && password === "password123") {
       try {
-        // 認証クッキーを設定
         document.cookie = "auth=true; path=/"
-        
         setTimeout(() => {
           router.push("/dashboard")
         }, 1000)
       } catch (error) {
-        setError("ログインに失敗しました。")
+        setError(t("login-failed"))
         setIsLoading(false)
       }
     } else {
-      setError("メールアドレスかパスワードが間違っています。")
+      setError(t("login-error"))
       setIsLoading(false)
     }
   }
@@ -44,15 +41,15 @@ export default function LoginPage() {
     <div className="flex h-screen items-center justify-center">
       <Card className="w-[400px]">
         <CardHeader>
-          <CardTitle>勤怠管理システム</CardTitle>
-          <CardDescription>ログインしてください</CardDescription>
+          <CardTitle>{t("login-title")}</CardTitle>
+          <CardDescription>{t("login-description")}</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Input
                 type="email"
-                placeholder="メールアドレス"
+                placeholder={t("email-placeholder")}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
@@ -60,7 +57,7 @@ export default function LoginPage() {
             <div className="space-y-2">
               <Input
                 type="password"
-                placeholder="パスワード"
+                placeholder={t("password-placeholder")}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
@@ -76,7 +73,7 @@ export default function LoginPage() {
               disabled={isLoading}
             >
               <LogIn className="mr-2 h-4 w-4" />
-              {isLoading ? "ログイン中..." : "ログイン"}
+              {isLoading ? t("logging-in") : t("login")}
             </Button>
           </form>
         </CardContent>

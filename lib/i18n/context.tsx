@@ -223,6 +223,16 @@ const translations = {
     "department-required": "所属を選択してください",
     "employee-id-required": "社員番号は必須です",
     "name-required": "氏名は必須です",
+
+    // Auth関連
+    "login-title": "勤怠管理システム",
+    "login-description": "ログインしてください",
+    "email-placeholder": "メールアドレス",
+    "password-placeholder": "パスワード",
+    "login": "ログイン",
+    "logging-in": "ログイン中...",
+    "login-error": "メールアドレスかパスワードが間違っています。",
+    "login-failed": "ログインに失敗しました。",
   },
   en: {
     // App Title
@@ -437,6 +447,16 @@ const translations = {
     "department-required": "Please select your department",
     "employee-id-required": "Employee ID is required",
     "name-required": "Name is required",
+
+    // Auth関連
+    "login-title": "勤怠管理システム",
+    "login-description": "ログインしてください",
+    "email-placeholder": "メールアドレス",
+    "password-placeholder": "パスワード",
+    "login": "ログイン",
+    "logging-in": "ログイン中...",
+    "login-error": "メールアドレスかパスワードが間違っています。",
+    "login-failed": "ログインに失敗しました。",
   }
 } as const
 
