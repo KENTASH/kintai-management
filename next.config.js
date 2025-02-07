@@ -1,8 +1,5 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // 開発時に export と unoptimized を無効化
-  // output: 'export',
-
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -11,7 +8,9 @@ const nextConfig = {
     domains: ['api.dicebear.com'], // アバター画像のドメインを許可
   },
 
-  // experimental セクションごと削除
+  experimental: {
+    appDir: true, // `app/` ディレクトリを有効化
+  },
 };
 
 module.exports = nextConfig;
