@@ -579,19 +579,19 @@ export default function MembersPage() {
     )
   }
 
-  // 既存のコードの中で、テーブルヘッダー部分を修正
+  // テーブルヘッダーの定義を修正
   const tableHeaders = [
     { id: 'employee_id', label: t('employee-id') },
     { id: 'department', label: t('department') },
     { id: 'name', label: t('name') },
-    { id: 'name_en', label: t('name-en') },
+    { id: 'name-en', label: t('name-en') },
     { id: 'email', label: t('email') },
-    { id: 'leader', label: '担当リーダー' },
-    { id: 'sub_leader', label: '担当サブリーダー' },
+    { id: 'leader', label: t('leader') },
+    { id: 'sub-leader', label: t('sub-leader') },
     { id: 'leader_auth', label: t('leader-permission') },
     { id: 'admin_auth', label: t('admin-permission') },
-    { id: 'status', label: 'ステータス' },
-    { id: 'actions', label: '操作' }
+    { id: 'status', label: t('status') },
+    { id: 'actions', label: t('actions') }
   ]
 
   // ステータス表示の変換関数を修正
