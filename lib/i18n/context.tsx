@@ -1,8 +1,11 @@
 "use client"
 
 import { createContext, useContext, useState } from "react"
+import { translations } from './translations'
 
 type Language = "ja" | "en"
+
+type TranslationKeys = keyof typeof translations.ja
 
 interface I18nContextType {
   language: Language
@@ -459,8 +462,6 @@ const translations = {
     "login-failed": "ログインに失敗しました。",
   }
 } as const
-
-export type TranslationKeys = keyof typeof translations.ja;
 
 const I18nContext = createContext<I18nContextType | null>(null);
 
