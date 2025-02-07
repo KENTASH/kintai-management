@@ -51,8 +51,22 @@ interface Member {
   is_admin: boolean
   registration_status: string
   is_active: boolean
+  user_supervisors?: Supervisor[]
+  user_roles?: Role[]
   leader_name?: string
   sub_leader_name?: string
+}
+
+interface Supervisor {
+  supervisor_type_id: number
+  supervisor: {
+    last_name: string
+    first_name: string
+  }
+}
+
+interface Role {
+  role_type_id: number
 }
 
 interface SearchCriteria {
@@ -198,8 +212,8 @@ export default function MembersPage() {
 
       // データの整形
       const formattedData = data?.map(member => {
-        const leaderInfo = member.user_supervisors?.find(s => s.supervisor_type_id === 1)
-        const subLeaderInfo = member.user_supervisors?.find(s => s.supervisor_type_id === 2)
+        const leaderInfo = member.user_supervisors?.find((s: Supervisor) => s.supervisor_type_id === 1)
+        const subLeaderInfo = member.user_supervisors?.find((s: Supervisor) => s.supervisor_type_id === 2)
 
         return {
           ...member,
@@ -209,8 +223,8 @@ export default function MembersPage() {
           sub_leader_name: subLeaderInfo?.supervisor
             ? `${subLeaderInfo.supervisor.last_name} ${subLeaderInfo.supervisor.first_name}`
             : '',
-          is_leader: member.user_roles?.some(r => r.role_type_id === 1) || false,
-          is_admin: member.user_roles?.some(r => r.role_type_id === 2) || false
+          is_leader: member.user_roles?.some((r: Role) => r.role_type_id === 1) || false,
+          is_admin: member.user_roles?.some((r: Role) => r.role_type_id === 2) || false
         }
       }) || []
 
