@@ -95,7 +95,7 @@ const STATUS_MAP_EN = {
 } as const;
 
 export default function MembersPage() {
-  const { t, locale } = useI18n()
+  const { t } = useI18n()
   const { toast } = useToast()
   const [searchCriteria, setSearchCriteria] = useState<SearchCriteria>({
     employeeId: "",
@@ -567,20 +567,20 @@ export default function MembersPage() {
 
   // 既存のコードの中で、テーブルヘッダー部分を修正
   const tableHeaders = [
-    { id: 'employee_id', label: '社員番号' },
-    { id: 'department', label: '部署' },
-    { id: 'name', label: '氏名' },
-    { id: 'name_en', label: '氏名（英語）' },
-    { id: 'email', label: 'メールアドレス' },
+    { id: 'employee_id', label: t('employee-id') },
+    { id: 'department', label: t('department') },
+    { id: 'name', label: t('name') },
+    { id: 'name_en', label: t('name-en') },
+    { id: 'email', label: t('email') },
     { id: 'leader', label: '担当リーダー' },
     { id: 'sub_leader', label: '担当サブリーダー' },
-    { id: 'leader_auth', label: 'リーダー権限' },
-    { id: 'admin_auth', label: '管理者権限' },
+    { id: 'leader_auth', label: t('leader-permission') },
+    { id: 'admin_auth', label: t('admin-permission') },
     { id: 'status', label: 'ステータス' },
-    { id: 'actions', label: '' },
+    { id: 'actions', label: '操作' }
   ]
 
-  // ステータス表示の変換関数を追加
+  // ステータス表示の変換関数を修正
   const getStatusText = (status: string): string => {
     const statusMap: { [key: string]: string } = {
       '01': '仮登録',

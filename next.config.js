@@ -8,9 +8,7 @@ const nextConfig = {
     domains: ['api.dicebear.com'], // アバター画像のドメインを許可
   },
 
-  experimental: {
-    appDir: true, // `app/` ディレクトリを有効化
-  },
+  output: 'standalone', // 静的エクスポートを回避（Supabaseの認証を維持）
 };
 
 module.exports = nextConfig;
