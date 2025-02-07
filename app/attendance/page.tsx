@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, parse, differenceInMinutes } from "date-fns"
 import { ja } from "date-fns/locale"
 import { Card, CardContent } from "@/components/ui/card"
@@ -10,6 +10,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Clock, Save } from "lucide-react"
 import { useI18n } from "@/lib/i18n/context"
+import { createClient } from '@supabase/supabase-js'
+
+// Supabaseクライアントの初期化
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 // ダミーユーザーデータ
 const dummyUser = {
@@ -85,10 +92,29 @@ const sumTimes = (times: string[]): string => {
   return `${hours.toString().padStart(3, '0')}:${minutes.toString().padStart(2, '0')}`
 }
 
+// レコードの型定義を追加
+interface AttendanceRecord {
+  id: string
+  user_id: string
+  date: string
+  start_time: string
+  end_time: string
+  break_time: string
+  actual_time: string
+  type: string
+  remarks: string
+  late_early_hours: string
+  work_type: {
+    code: string
+    name: string
+  }
+}
+
 export default function AttendancePage() {
   const { t } = useI18n()
   const [currentDate, setCurrentDate] = useState(new Date())
   const [workplace, setWorkplace] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
   const [attendanceData, setAttendanceData] = useState<{
     [key: string]: {
       startTime: string
@@ -135,13 +161,79 @@ export default function AttendancePage() {
     }
   }, [attendanceData])
 
-  const handleYearChange = (year: string) => {
-    setCurrentDate(new Date(parseInt(year), currentDate.getMonth()))
+  // 勤怠データを取得する関数
+  const fetchAttendanceData = async (year: number, month: number) => {
+    setIsLoading(true)
+    try {
+      const { data: monthlyRecord, error: monthlyError } = await supabase
+        .from('attendance_monthly_records')
+        .select('*')
+        .eq('user_id', '72dfec22-392a-46c9-bf5d-2e7cc2c7f4e2')
+        .eq('year_month', `${year}-${month.toString().padStart(2, '0')}-01`)
+        .single()
+
+      if (monthlyError) throw monthlyError
+
+      if (monthlyRecord) {
+        const { data: dailyRecords, error: dailyError } = await supabase
+          .from('attendance_daily_records')
+          .select(`
+            *,
+            work_types (
+              code
+            )
+          `)
+          .eq('monthly_record_id', monthlyRecord.id)
+          .order('work_date')
+
+        if (dailyError) throw dailyError
+
+        const newAttendanceData: typeof attendanceData = {}
+        dailyRecords?.forEach(record => {
+          const dateKey = format(new Date(record.work_date), 'yyyy-MM-dd')
+          newAttendanceData[dateKey] = {
+            startTime: record.start_time ? format(new Date(`2000-01-01 ${record.start_time}`), 'HH:mm') : '',
+            endTime: record.end_time ? format(new Date(`2000-01-01 ${record.end_time}`), 'HH:mm') : '',
+            breakTime: record.break_time ? '1:00' : '',
+            actualTime: record.actual_work_hours ? 
+              `${Math.floor(record.actual_work_hours)}:${((record.actual_work_hours % 1) * 60).toString().padStart(2, '0')}` : '',
+            type: record.work_types?.code?.toLowerCase() || 'none',
+            remarks: record.remarks || '',
+            lateEarlyHours: record.late_leave_hours?.toString() || ''
+          }
+        })
+        setAttendanceData(newAttendanceData)
+        setWorkplace(monthlyRecord.work_location || '')
+      }
+    } catch (error) {
+      console.error('Error fetching attendance data:', error)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  const handleMonthChange = (month: string) => {
-    setCurrentDate(new Date(currentDate.getFullYear(), parseInt(month) - 1))
+  // 年選択時のハンドラー
+  const handleYearChange = (year: string) => {
+    const newDate = new Date(currentDate)
+    newDate.setFullYear(parseInt(year))
+    setCurrentDate(newDate)
+    fetchAttendanceData(parseInt(year), newDate.getMonth() + 1)
   }
+
+  // 月選択時のハンドラー
+  const handleMonthChange = (month: string) => {
+    const newDate = new Date(currentDate)
+    newDate.setMonth(parseInt(month) - 1)
+    setCurrentDate(newDate)
+    fetchAttendanceData(newDate.getFullYear(), parseInt(month))
+  }
+
+  // 初期表示時のデータ取得
+  useEffect(() => {
+    const year = currentDate.getFullYear()
+    const month = currentDate.getMonth() + 1
+    fetchAttendanceData(year, month)
+  }, [])
 
   const handleTimeChange = (date: Date, field: string, value: string) => {
     const dateKey = format(date, 'yyyy-MM-dd')
