@@ -592,8 +592,8 @@ export default function MembersPage() {
     { id: 'sub_leader', label: t('sub-leader') },
     { id: 'leader_auth', label: t('leader-permission') },
     { id: 'admin_auth', label: t('admin-permission') },
-    { id: 'status', label: t('status') },
-    { id: 'actions', label: t('actions') }
+    { id: 'status', label: t('member-status') },
+    { id: 'actions', label: t('member-actions') }
   ]
 
   // ステータス表示の変換関数を修正
