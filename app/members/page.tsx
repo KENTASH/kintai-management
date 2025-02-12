@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Users, Search, Save, Plus, Trash2, UserPlus, Mail, Ban, AlertCircle, CheckCircle2, Info } from "lucide-react"
+import { Users, Search, Save, Plus, Trash2, UserPlus, Mail, Ban, AlertCircle, CheckCircle2, Info, X } from "lucide-react"
 import { useI18n } from "@/lib/i18n/context"
 import {
   AlertDialog,
@@ -108,6 +108,22 @@ const STATUS_MAP_EN = {
   '99': 'Disabled'
 } as const;
 
+// バリデーション用の型定義
+interface ValidationError {
+  field: string
+  message: string
+}
+
+// メッセージの型を拡張
+interface Message {
+  type: 'success' | 'error' | 'info'
+  text: string
+  persistent?: boolean  // フェードアウトしないフラグ
+  position?: 'top' | 'bottom'  // 表示位置
+  alignment?: 'left' | 'center'  // 文字寄せ
+  dismissible?: boolean  // 手動で消せるフラグ
+}
+
 export default function MembersPage() {
   const { t } = useI18n()
   const { toast } = useToast()
@@ -118,11 +134,9 @@ export default function MembersPage() {
   })
   
   const [members, setMembers] = useState<Member[]>([])
+  const [originalMembers, setOriginalMembers] = useState<Member[]>([])
   const [isLoading, setIsLoading] = useState(false)
-  const [message, setMessage] = useState<{
-    type: 'success' | 'error' | 'info'
-    text: string
-  } | null>(null)
+  const [message, setMessage] = useState<Message | null>(null)
 
   const emptyMember: Member = {
     id: "",
@@ -133,12 +147,14 @@ export default function MembersPage() {
     last_name_en: "",
     first_name_en: "",
     email: "",
-    leader_id: null,
-    sub_leader_id: null,
+    leader_id: "",
+    sub_leader_id: "",
+    leader_name: "",
+    sub_leader_name: "",
     is_leader: false,
     is_admin: false,
     registration_status: "01",
-    is_active: true,
+    is_active: true
   }
 
   const [editingMembers, setEditingMembers] = useState<Member[]>([])
@@ -229,6 +245,7 @@ export default function MembersPage() {
       }) || []
 
       setMembers(formattedData)
+      setOriginalMembers(JSON.parse(JSON.stringify(formattedData)))
 
       // 検索結果に応じたメッセージを設定
       if (criteria) {  // 検索ボタンからの呼び出し時のみメッセージを表示
@@ -391,10 +408,109 @@ export default function MembersPage() {
     }))
   }
 
-  const handleSave = () => {
-    console.log("Saving members:", [...members, ...editingMembers])
-    setMembers([...members, ...editingMembers])
-    setEditingMembers([])
+  // 保存処理を修正
+  const handleSave = async () => {
+    try {
+      // 新規データの保存
+      for (const member of editingMembers) {
+        // 新規メンバーを保存し、IDを直接取得
+        const { data: newMember, error: insertError } = await supabase
+          .from('users')
+          .insert({
+            employee_id: member.employee_id,
+            department: member.department,
+            last_name: member.last_name,
+            first_name: member.first_name,
+            last_name_en: member.last_name_en,
+            first_name_en: member.first_name_en,
+            email: member.email,
+            is_leader: member.is_leader || false,
+            is_admin: member.is_admin || false,
+            registration_status: '01',
+            is_active: true
+          })
+          .select('id')
+          .single()
+
+        if (insertError || !newMember) {
+          console.error('Error inserting member:', insertError)
+          throw new Error(`メンバーの保存中にエラーが発生しました: ${insertError?.message || 'Unknown error'}`)
+        }
+
+        // リーダー情報の保存
+        if (member.leader_id) {
+          const { error: leaderError } = await supabase
+            .from('user_supervisors')
+            .insert({
+              user_id: newMember.id,
+              supervisor_id: member.leader_id,
+              supervisor_type_id: 1
+            })
+          if (leaderError) throw leaderError
+        }
+
+        // サブリーダー情報の保存
+        if (member.sub_leader_id) {
+          const { error: subLeaderError } = await supabase
+            .from('user_supervisors')
+            .insert({
+              user_id: newMember.id,
+              supervisor_id: member.sub_leader_id,
+              supervisor_type_id: 2
+            })
+          if (subLeaderError) throw subLeaderError
+        }
+      }
+
+      setMessage({
+        type: 'success',
+        text: '正常に保存が完了しました。',
+        position: 'bottom',
+        alignment: 'center',
+        dismissible: true
+      })
+
+      // 保存後のデータ再取得
+      fetchMembers()
+      setEditingMembers([])
+
+    } catch (error) {
+      console.error('Error saving members:', error)
+      setMessage({
+        type: 'error',
+        text: error instanceof Error ? error.message : '保存中に予期せぬエラーが発生しました。',
+        position: 'top',
+        alignment: 'left',
+        dismissible: true
+      })
+    }
+  }
+
+  // バリデーション関数
+  const validateMembers = (members: Member[]): ValidationError[] => {
+    const errors: ValidationError[] = []
+
+    members.forEach(member => {
+      if (!member.employee_id) {
+        errors.push({ field: 'employee_id', message: '社員番号は必須です。' })
+      }
+      if (!member.department) {
+        errors.push({ field: 'department', message: '部署は必須です。' })
+      }
+      if (!member.last_name || !member.first_name) {
+        errors.push({ field: 'name', message: '氏名は必須です。' })
+      }
+      if (!member.last_name_en || !member.first_name_en) {
+        errors.push({ field: 'name_en', message: '氏名（英語）は必須です。' })
+      }
+      if (!member.email) {
+        errors.push({ field: 'email', message: 'メールアドレスは必須です。' })
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(member.email)) {
+        errors.push({ field: 'email', message: 'メールアドレスの形式が正しくありません。' })
+      }
+    })
+
+    return errors
   }
 
   const handleLeaderSelect = (selectedMember: Member) => {
@@ -429,13 +545,13 @@ export default function MembersPage() {
 
   const renderInputField = (member: Member, field: keyof Member, isExisting: boolean = false) => {
     if (isExisting && field === 'employee_id') {
-      return <div className="px-2 py-1">{member[field]}</div>
+      return <div className="px-2 py-1">{member[field] || ''}</div>
     }
 
     if (field === 'department') {
       return (
         <Select
-          value={member[field]}
+          value={member[field] || ''}
           onValueChange={(value) => handleInputChange(member.id, field, value)}
         >
           <SelectTrigger className="h-9 w-full">
@@ -454,7 +570,7 @@ export default function MembersPage() {
       return (
         <div className="flex justify-center">
           <Checkbox
-            checked={member[field] as boolean}
+            checked={!!member[field]}
             onCheckedChange={(checked) => handleInputChange(member.id, field, !!checked)}
           />
         </div>
@@ -465,7 +581,7 @@ export default function MembersPage() {
       return (
         <div className="flex items-center gap-2">
           <Input
-            value={member[field] as string}
+            value={member[field] || ''}
             readOnly
             className="h-9 flex-1"
             placeholder={`${field === 'leader_id' ? '担当リーダー' : '担当サブリーダー'}を選択...`}
@@ -484,7 +600,7 @@ export default function MembersPage() {
 
     return (
       <Input
-        value={member[field] as string}
+        value={member[field] || ''}
         onChange={(e) => handleInputChange(member.id, field, e.target.value)}
         className="h-9 w-full"
         type={field === 'email' ? 'email' : 'text'}
@@ -553,6 +669,44 @@ export default function MembersPage() {
       info: <Info className="h-5 w-5 text-blue-500" />
     }
 
+    // エラーとワーニングは上部に表示
+    if (message.type === 'error') {
+      return (
+        <div className="relative mb-4 pointer-events-auto w-1/2">
+          <AnimatePresence>
+            {message && (
+              <motion.div
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.2 }}
+                className={`
+                  flex items-center justify-between
+                  rounded-lg border p-4 
+                  shadow-lg
+                  ${styles[message.type]}
+                `}
+              >
+                <div className="flex items-center gap-2">
+                  {icons[message.type]}
+                  <span className="text-sm font-medium whitespace-pre-line">{message.text}</span>
+                </div>
+                {message.dismissible && (
+                  <button
+                    onClick={() => setMessage(null)}
+                    className="p-1 hover:bg-gray-100 rounded-full"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )
+    }
+
+    // 正常メッセージは下部に表示
     return (
       <div className="fixed bottom-8 left-0 right-0 z-[100] flex justify-center pointer-events-none">
         <AnimatePresence>
@@ -571,7 +725,7 @@ export default function MembersPage() {
               `}
             >
               {icons[message.type]}
-              <span className="text-sm font-medium">{message.text}</span>
+              <span className="text-sm font-medium whitespace-pre-line">{message.text}</span>
             </motion.div>
           )}
         </AnimatePresence>

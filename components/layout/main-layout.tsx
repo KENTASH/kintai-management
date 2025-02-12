@@ -9,15 +9,21 @@ import { UserNav } from './user-nav'
 export function MainLayout({ children }: { children: React.ReactNode }) {
   const [loginDate, setLoginDate] = useState('')
   const [isSidebarOpen, setSidebarOpen] = useState(true)
+  const [isMounted, setIsMounted] = useState(false)
   const pathname = usePathname()
   const isLoginPage = pathname === "/"
-  const isAuthenticated = typeof window !== 'undefined' && document.cookie.includes('auth=true')
 
   useEffect(() => {
+    setIsMounted(true)
     setLoginDate(new Date().toLocaleString('ja-JP'))
   }, [])
 
-  if (isLoginPage && !isAuthenticated) {
+  // クライアントサイドでのレンダリングが準備できるまで何も表示しない
+  if (!isMounted) {
+    return null
+  }
+
+  if (isLoginPage) {
     return <div className="min-h-screen bg-blue-50 dark:bg-blue-950">{children}</div>
   }
 

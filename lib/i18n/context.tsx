@@ -236,6 +236,9 @@ const translations = {
     "logging-in": "ログイン中...",
     "login-error": "メールアドレスかパスワードが間違っています。",
     "login-failed": "ログインに失敗しました。",
+
+    // New translation
+    "branch-label": "所属",
   },
   en: {
     // App Title
@@ -460,6 +463,9 @@ const translations = {
     "logging-in": "ログイン中...",
     "login-error": "メールアドレスかパスワードが間違っています。",
     "login-failed": "ログインに失敗しました。",
+
+    // New translation
+    "branch-label": "Department",
   }
 } as const
 

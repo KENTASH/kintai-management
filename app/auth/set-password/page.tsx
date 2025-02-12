@@ -6,12 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/use-toast"
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import { createClient } from "@/lib/supabaseClient"
 
 export default function SetPasswordPage() {
   const router = useRouter()
@@ -29,18 +24,36 @@ export default function SetPasswordPage() {
         throw new Error("パスワードが一致しません")
       }
 
-      const { error } = await supabase.auth.updateUser({
+      const supabase = createClient()
+
+      // パスワードを更新
+      const { error: updateError } = await supabase.auth.updateUser({
         password: password
       })
 
-      if (error) throw error
+      if (updateError) throw updateError
+
+      // セッションを更新
+      await supabase.auth.refreshSession()
+
+      // ユーザーのステータスを更新
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { error: statusError } = await supabase
+          .from('users')
+          .update({ registration_status: '03' })
+          .eq('id', user.id)
+
+        if (statusError) throw statusError
+      }
 
       toast({
         title: "成功",
         description: "パスワードを設定しました",
       })
 
-      router.push("/")
+      router.refresh()
+      router.push("/dashboard")
     } catch (error) {
       console.error('Error setting password:', error)
       toast({

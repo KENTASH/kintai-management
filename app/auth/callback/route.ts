@@ -8,9 +8,28 @@ export async function GET(request: Request) {
 
   if (code) {
     const supabase = createRouteHandlerClient({ cookies })
-    await supabase.auth.exchangeCodeForSession(code)
+    
+    // セッションの交換と設定
+    const { data: { session }, error } = await supabase.auth.exchangeCodeForSession(code)
+    
+    if (error) {
+      return NextResponse.redirect(new URL(`/?error=${error.message}`, requestUrl.origin))
+    }
+
+    if (session) {
+      const { data: profile } = await supabase
+        .from('users')
+        .select('registration_status')
+        .eq('auth_id', session.user.id)
+        .single()
+
+      if (profile?.registration_status === '01') {
+        return NextResponse.redirect(new URL('/set-password', requestUrl.origin))
+      }
+
+      return NextResponse.redirect(new URL('/dashboard', requestUrl.origin))
+    }
   }
 
-  // URL to redirect to after sign in process completes
-  return NextResponse.redirect(requestUrl.origin)
+  return NextResponse.redirect(new URL('/', requestUrl.origin))
 } 
