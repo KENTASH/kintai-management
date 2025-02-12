@@ -385,15 +385,15 @@ export default function AttendancePage() {
               </div>
 
               <div className="border rounded-lg">
-                <div className="grid grid-cols-28 gap-2 p-2 bg-gray-100 dark:bg-gray-800 rounded-t-lg font-medium text-sm">
-                  <div className="col-span-2">{t("date")}</div>
-                  <div className="col-span-3">{t("start-time")}</div>
-                  <div className="col-span-3">{t("end-time")}</div>
-                  <div className="col-span-3">{t("break-time")}</div>
-                  <div className="col-span-3">{t("actual-time")}</div>
-                  <div className="col-span-4">{t("attendance-type")}</div>
-                  <div className="col-span-8">{t("remarks")}</div>
-                  <div className="col-span-2">{t("late-early-hours")}</div>
+                <div className="grid grid-cols-12 gap-2 p-2 bg-gray-100 dark:bg-gray-800 rounded-t-lg font-medium text-sm">
+                  <div className="col-span-1">{t("date")}</div>
+                  <div className="col-span-1">{t("start-time")}</div>
+                  <div className="col-span-1">{t("end-time")}</div>
+                  <div className="col-span-1">{t("break-time")}</div>
+                  <div className="col-span-1">{t("actual-time")}</div>
+                  <div className="col-span-2">{t("attendance-type")}</div>
+                  <div className="col-span-4">{t("remarks")}</div>
+                  <div className="col-span-1">{t("late-early-hours")}</div>
                 </div>
 
                 <div className="divide-y">
@@ -405,14 +405,14 @@ export default function AttendancePage() {
                     return (
                       <div
                         key={dateKey}
-                        className={`grid grid-cols-28 gap-2 p-2 items-center ${
+                        className={`grid grid-cols-12 gap-2 p-2 items-center ${
                           isWeekend ? 'bg-gray-50 dark:bg-gray-900' : ''
                         }`}
                       >
-                        <div className="col-span-2 text-sm">
+                        <div className="col-span-1 text-sm">
                           {format(day, 'M/d')}({dayOfWeek})
                         </div>
-                        <div className="col-span-3">
+                        <div className="col-span-1">
                           <Input
                             type="text"
                             inputMode="numeric"
@@ -422,7 +422,7 @@ export default function AttendancePage() {
                             className="h-8 text-center"
                           />
                         </div>
-                        <div className="col-span-3">
+                        <div className="col-span-1">
                           <Input
                             type="text"
                             inputMode="numeric"
@@ -432,7 +432,7 @@ export default function AttendancePage() {
                             className="h-8 text-center"
                           />
                         </div>
-                        <div className="col-span-3">
+                        <div className="col-span-1">
                           <Input
                             type="text"
                             inputMode="numeric"
@@ -442,7 +442,7 @@ export default function AttendancePage() {
                             className="h-8 text-center"
                           />
                         </div>
-                        <div className="col-span-3">
+                        <div className="col-span-1">
                           <Input
                             type="text"
                             value={attendanceData[dateKey]?.actualTime || ""}
@@ -450,7 +450,7 @@ export default function AttendancePage() {
                             className="h-8 bg-gray-50 dark:bg-gray-800 text-center"
                           />
                         </div>
-                        <div className="col-span-4">
+                        <div className="col-span-2">
                           <Select
                             onValueChange={(value) => handleTimeChange(day, 'type', value)}
                             value={attendanceData[dateKey]?.type || "none"}
@@ -476,7 +476,7 @@ export default function AttendancePage() {
                             </SelectContent>
                           </Select>
                         </div>
-                        <div className="col-span-8">
+                        <div className="col-span-4">
                           <Input
                             type="text"
                             value={attendanceData[dateKey]?.remarks || ""}
@@ -485,7 +485,7 @@ export default function AttendancePage() {
                             placeholder={t("remarks-placeholder")}
                           />
                         </div>
-                        <div className="col-span-2">
+                        <div className="col-span-1">
                           <Input
                             type="text"
                             inputMode="numeric"
