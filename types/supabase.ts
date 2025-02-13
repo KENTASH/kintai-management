@@ -82,6 +82,46 @@ export interface Database {
           created_by: string | null
           updated_by: string | null
         }
+        Insert: {
+          id?: string
+          auth_id: string
+          employee_id: string
+          email: string
+          last_name: string
+          first_name: string
+          last_name_en?: string | null
+          first_name_en?: string | null
+          branch: string
+          avatar_url?: string | null
+          is_active?: boolean
+          theme?: string
+          language?: string
+          registration_status?: string | null
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          id?: string
+          auth_id?: string
+          employee_id?: string
+          email?: string
+          last_name?: string
+          first_name?: string
+          last_name_en?: string | null
+          first_name_en?: string | null
+          branch?: string
+          avatar_url?: string | null
+          is_active?: boolean
+          theme?: string
+          language?: string
+          registration_status?: string | null
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+          updated_by?: string | null
+        }
       }
       user_supervisors: {
         Row: {
