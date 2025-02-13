@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react"
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, parse, differenceInMinutes } from "date-fns"
-import { ja } from "date-fns/locale"
+import { ja } from "date-fns/locale/ja"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -108,6 +108,25 @@ interface AttendanceRecord {
     code: string
     name: string
   }
+}
+
+// イベントハンドラーの型定義
+const handleTimeChange = (
+  day: Date,
+  field: string,
+  value: string
+) => {
+  // ...
+}
+
+// 入力イベントの型定義
+const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // ...
+}
+
+// セレクトの値変更イベントの型定義
+const handleSelectChange = (value: string) => {
+  // ...
 }
 
 export default function AttendancePage() {
@@ -234,34 +253,6 @@ export default function AttendancePage() {
     const month = currentDate.getMonth() + 1
     fetchAttendanceData(year, month)
   }, [])
-
-  const handleTimeChange = (date: Date, field: string, value: string) => {
-    const dateKey = format(date, 'yyyy-MM-dd')
-    setAttendanceData(prev => {
-      const newData = {
-        ...prev,
-        [dateKey]: {
-          ...prev[dateKey],
-          [field]: field === 'startTime' || field === 'endTime' || field === 'breakTime' 
-            ? formatTimeString(value) 
-            : value
-        }
-      }
-
-      if ((field === 'startTime' || field === 'endTime' || field === 'breakTime') && 
-          newData[dateKey]?.startTime?.includes(':') && 
-          newData[dateKey]?.endTime?.includes(':') &&
-          newData[dateKey]?.breakTime?.includes(':')) {
-        newData[dateKey].actualTime = calculateActualTime(
-          newData[dateKey].startTime,
-          newData[dateKey].endTime,
-          newData[dateKey].breakTime
-        )
-      }
-
-      return newData
-    })
-  }
 
   const handleSave = () => {
     console.log('Saving attendance data:', attendanceData)

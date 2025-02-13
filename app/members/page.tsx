@@ -1057,7 +1057,7 @@ export default function MembersPage() {
                   onClick={handleSearch}
                   className="bg-blue-600 hover:bg-blue-700 text-white"
                 >
-                  <Search className="h-4 w-4 mr-2" />
+                <Search className="h-4 w-4 mr-2" />
                   検索
                 </Button>
                 <Button
@@ -1066,7 +1066,7 @@ export default function MembersPage() {
                 >
                   <X className="h-4 w-4 mr-2" />
                   クリア
-                </Button>
+              </Button>
               </div>
             </div>
 
