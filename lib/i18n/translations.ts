@@ -12,10 +12,12 @@ export const translations = {
     "sub-leader": "担当サブリーダー",
     "leader-permission": "リーダー権限",
     "admin-permission": "管理者権限",
-    "member-status": "ステータス",
-    "member-actions": "操作",
+    "member-status": "メンバーステータス",
+    "member-actions": "アクション",
     "disable": "無効化",
     "invite": "招待",
+    'select-branch': '部署を選択',
+    'clear': 'クリア'
   },
   en: {
     // ... 既存の翻訳
@@ -30,9 +32,21 @@ export const translations = {
     "sub-leader": "Sub Leader",
     "leader-permission": "Leader Permission",
     "admin-permission": "Admin Permission",
-    "member-status": "Status",
+    "member-status": "Member Status",
     "member-actions": "Actions",
     "disable": "Disable",
     "invite": "Invite",
+    'select-branch': 'Select Branch',
+    'clear': 'Clear'
   }
-} as const; 
+} as const;
+
+// 型定義を拡張
+declare module '@/lib/i18n/context' {
+  interface I18nTranslations {
+    'select-branch': string
+    'member-status': string
+    'member-actions': string
+    'clear': string
+  }
+} 

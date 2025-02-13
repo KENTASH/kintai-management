@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { createClient } from '@supabase/supabase-js'
+import { createClient, PostgrestError } from '@supabase/supabase-js'
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -30,31 +30,29 @@ import {
 } from "@/components/ui/dialog"
 import { useToast } from "@/components/ui/use-toast"
 import { AnimatePresence, motion } from "framer-motion"
-
-const departments = [
-  "NISZ浜松", "NISZ名古屋", "NISZ大阪", "NAL東京",
-  "GRS大阪", "GRS名古屋", "GRS東京", "NAL名古屋",
-]
+import { createClient as newClient } from '@/lib/supabaseClient'
 
 interface Member {
   id: string
   employee_id: string
-  department: string
+  email: string
   last_name: string
   first_name: string
-  last_name_en: string
-  first_name_en: string
-  email: string
-  leader_id: string | null
-  sub_leader_id: string | null
-  is_leader: boolean
-  is_admin: boolean
-  registration_status: string
+  last_name_en: string | null
+  first_name_en: string | null
+  branch: string
+  branch_name: string
   is_active: boolean
-  user_supervisors?: Supervisor[]
-  user_roles?: Role[]
-  leader_name?: string
-  sub_leader_name?: string
+  registration_status: string | null
+  supervisor_info: {
+    leader: string | null
+    subleader: string | null
+  }
+  roles: {
+    is_leader: boolean
+    is_admin: boolean
+  }
+  [key: string]: any  // インデックスシグネチャを追加
 }
 
 interface Supervisor {
@@ -72,7 +70,7 @@ interface Role {
 interface SearchCriteria {
   employeeId: string
   name: string
-  department: string
+  branch: string  // departmentをbranchに変更
 }
 
 interface LeaderSearchCriteria {
@@ -83,14 +81,19 @@ interface LeaderSearchCriteria {
 
 interface CurrentEditingMember {
   memberId: string
-  field: 'leader' | 'subLeader'
+  field: 'leader' | 'subleader'
 }
 
-// Supabaseクライアントの初期化
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+// BranchMaster型の定義を修正
+interface BranchMaster {
+  code: string
+  name_jp: string
+  name_en: string
+  created_at: string | null
+  updated_at: string | null
+  created_by: string | null
+  updated_by: string | null
+}
 
 // ステータスの定義
 const STATUS_MAP = {
@@ -124,37 +127,76 @@ interface Message {
   dismissible?: boolean  // 手動で消せるフラグ
 }
 
+// ステータスマップの型を修正
+type StatusMapType = {
+  [key: string]: {
+    ja: string;
+    en: string;
+  }
+}
+
+const statusMap: StatusMapType = {
+  '00': { ja: '未登録', en: 'Unregistered' },
+  '01': { ja: '仮登録済み', en: 'Temporary Registered' },
+  '02': { ja: '招待済み', en: 'Invited' },
+  '03': { ja: '認証済み', en: 'Authenticated' },
+  '99': { ja: '廃止済み', en: 'Deactivated' }
+}
+
+// UserDataの型定義を追加
+interface UserData {
+  id: string
+  employee_id: string
+  email: string
+  last_name: string
+  first_name: string
+  last_name_en: string | null
+  first_name_en: string | null
+  branch: string
+  is_active: boolean
+  registration_status: string | null
+  branch_master: Array<{
+    name_jp: string
+    name_en: string
+  }>
+}
+
 export default function MembersPage() {
-  const { t } = useI18n()
+  const { t, language } = useI18n()
   const { toast } = useToast()
   const [searchCriteria, setSearchCriteria] = useState<SearchCriteria>({
     employeeId: "",
     name: "",
-    department: "all",
+    branch: "all"  // departmentをbranchに変更
   })
   
   const [members, setMembers] = useState<Member[]>([])
   const [originalMembers, setOriginalMembers] = useState<Member[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [message, setMessage] = useState<Message | null>(null)
+  const [branches, setBranches] = useState<BranchMaster[]>([])
+  const [hasSearched, setHasSearched] = useState(false)  // 検索実行フラグを追加
 
   const emptyMember: Member = {
     id: "",
     employee_id: "",
-    department: "",
+    branch: "",
+    branch_name: "",
     last_name: "",
     first_name: "",
-    last_name_en: "",
-    first_name_en: "",
+    last_name_en: null,
+    first_name_en: null,
     email: "",
-    leader_id: "",
-    sub_leader_id: "",
-    leader_name: "",
-    sub_leader_name: "",
-    is_leader: false,
-    is_admin: false,
     registration_status: "01",
-    is_active: true
+    is_active: true,
+    supervisor_info: {
+      leader: null,
+      subleader: null
+    },
+    roles: {
+      is_leader: false,
+      is_admin: false
+    }
   }
 
   const [editingMembers, setEditingMembers] = useState<Member[]>([])
@@ -178,105 +220,170 @@ export default function MembersPage() {
     }
   }, [message])
 
-  // fetchMembers関数を検索処理として定義
-  const fetchMembers = async (criteria?: SearchCriteria) => {
+  // 所属マスタの取得
+  useEffect(() => {
+    const initializeBranches = async () => {
+      const supabase = newClient()
+      try {
+        const { data: branchData } = await supabase
+          .from('branch_master')
+          .select('*') as { data: BranchMaster[] }
+
+        const formattedBranches: BranchMaster[] = [
+          {
+            code: 'all',
+            name_jp: '全て',
+            name_en: 'All',
+            created_at: null,
+            updated_at: null,
+            created_by: null,
+            updated_by: null
+          },
+          ...branchData
+        ]
+
+        setBranches(formattedBranches)
+      } catch (error) {
+        console.error('Error fetching branches:', error)
+        toast({
+          title: "エラー",
+          description: "所属情報の取得に失敗しました",
+          variant: "destructive",
+        })
+      }
+    }
+
+    initializeBranches()
+  }, [])
+
+  // 初期化処理の実装
+  const initializeMembers = async () => {
     setIsLoading(true)
     try {
-      let query = supabase
-        .from('users')
-        .select(`
-          *,
-          user_roles!left (
-            role_type_id
-          ),
-          user_supervisors!left (
-            supervisor_id,
-            supervisor_type_id,
-            supervisor:users!inner (
-              last_name,
-              first_name
-            )
-          )
-        `)
-        .eq('is_active', true)
+      // ブランチ情報のみを取得
+      const { data: branchData, error: branchError } = await supabase
+        .from('branch_master')
+        .select('*')
+        .order('code')
 
-      // 検索条件の適用
-      if (criteria) {
-        if (criteria.department && criteria.department !== 'all') {
-          query = query.eq('department', criteria.department)
-        }
-
-        if (criteria.employeeId) {
-          query = query.ilike('employee_id', `%${criteria.employeeId}%`)
-        }
-
-        if (criteria.name) {
-          query = query.or(
-            `last_name.ilike.%${criteria.name}%,` +
-            `first_name.ilike.%${criteria.name}%,` +
-            `last_name_en.ilike.%${criteria.name}%,` +
-            `first_name_en.ilike.%${criteria.name}%`
-          )
-        }
-      }
-
-      query = query.order('employee_id')
-
-      const { data, error } = await query
-
-      if (error) throw error
-
-      // データの整形
-      const formattedData = data?.map(member => {
-        const leaderInfo = member.user_supervisors?.find((s: Supervisor) => s.supervisor_type_id === 1)
-        const subLeaderInfo = member.user_supervisors?.find((s: Supervisor) => s.supervisor_type_id === 2)
-
-        return {
-          ...member,
-          leader_name: leaderInfo?.supervisor 
-            ? `${leaderInfo.supervisor.last_name} ${leaderInfo.supervisor.first_name}`
-            : '',
-          sub_leader_name: subLeaderInfo?.supervisor
-            ? `${subLeaderInfo.supervisor.last_name} ${subLeaderInfo.supervisor.first_name}`
-            : '',
-          is_leader: member.user_roles?.some((r: Role) => r.role_type_id === 1) || false,
-          is_admin: member.user_roles?.some((r: Role) => r.role_type_id === 2) || false
-        }
-      }) || []
-
-      setMembers(formattedData)
-      setOriginalMembers(JSON.parse(JSON.stringify(formattedData)))
-
-      // 検索結果に応じたメッセージを設定
-      if (criteria) {  // 検索ボタンからの呼び出し時のみメッセージを表示
-        if (!formattedData || formattedData.length === 0) {
-          setMessage({
-            type: 'info',
-            text: '検索条件に該当するデータはありません。'
-          })
-        } else {
-          setMessage({
-            type: 'success',
-            text: '検索処理が完了しました。'
-          })
-        }
-      }
+      if (branchError) throw branchError
+      setBranches(branchData)
 
     } catch (error) {
-      console.error('Error fetching members:', error)
-      setMessage({
-        type: 'error',
-        text: '異常が発生しました。システム管理者に問い合わせてください。'
+      console.error('Error initializing:', error)
+      toast({
+        title: "エラー",
+        description: "初期化に失敗しました",
+        variant: "destructive",
       })
     } finally {
       setIsLoading(false)
     }
   }
 
+  // 検索処理の実装
+  const handleSearch = async () => {
+    setIsLoading(true)
+    const supabase = newClient()
+
+    try {
+      let query = supabase
+        .from('users')
+        .select(`
+          id,
+          employee_id,
+          email,
+          last_name,
+          first_name,
+          last_name_en,
+          first_name_en,
+          branch,
+          is_active,
+          registration_status,
+          branch_master!inner (
+            name_jp,
+            name_en
+          )
+        `)
+        .eq('is_active', true)
+
+      if (searchCriteria.branch && searchCriteria.branch !== 'all') {
+        query.eq('branch', searchCriteria.branch)
+      }
+      if (searchCriteria.employeeId) {
+        query.ilike('employee_id', `%${searchCriteria.employeeId}%`)
+      }
+      if (searchCriteria.name) {
+        query.or(`last_name.ilike.%${searchCriteria.name}%,first_name.ilike.%${searchCriteria.name}%`)
+      }
+
+      const { data: users, error: usersError } = await query
+
+      if (usersError) throw usersError
+
+      const formattedUsers = users?.map(user => ({
+        ...user,
+        branch_name: user.branch_master?.[0]?.name_jp || '',
+        supervisor_info: {
+          leader: null,
+          subleader: null
+        },
+        roles: {
+          is_leader: false,
+          is_admin: false
+        }
+      })) as Member[]
+
+      setMembers(formattedUsers || [])
+      setOriginalMembers(formattedUsers || [])
+      setHasSearched(true)
+
+      // メッセージ表示の処理を修正
+      if (formattedUsers.length === 0) {
+        setMessage({
+          type: 'info',
+          text: '該当するメンバーが見つかりませんでした'
+        })
+      } else {
+        setMessage({
+          type: 'success',
+          text: `${formattedUsers.length}件のメンバーが見つかりました`
+        })
+      }
+
+    } catch (error) {
+      console.error('Error searching members:', error)
+      setMessage({
+        type: 'error',
+        text: 'メンバー情報の検索に失敗しました'
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // クリアボタンのハンドラを修正 - シンプルに検索条件のリセットのみを行う
+  const handleClearSearch = () => {
+    setSearchCriteria({
+      employeeId: '',
+      name: '',
+      branch: 'all'
+    })
+  }
+
+  // ステータスラベルの取得
+  const getStatusLabel = (status: string | null, lang: string): string => {
+    if (!status) return ''
+    return statusMap[status]?.[lang as keyof typeof statusMap[string]] || status
+  }
+
   // 新規メンバーの追加
   const handleAddMember = async (member: Omit<Member, 'id'>) => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      )
         .from('users')
         .insert([{
           ...member,
@@ -307,11 +414,17 @@ export default function MembersPage() {
   const handleInviteMember = async (member: Member) => {
     try {
       // Supabaseの管理者招待APIを呼び出し
-      const { data, error } = await supabase.auth.admin.inviteUserByEmail(member.email)
+      const { data, error } = await createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      ).auth.admin.inviteUserByEmail(member.email)
       if (error) throw error
 
       // 登録ステータスを更新
-      const { error: updateError } = await supabase
+      const { error: updateError } = await createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      )
         .from('users')
         .update({ registration_status: '02' })
         .eq('id', member.id)
@@ -337,7 +450,10 @@ export default function MembersPage() {
   // メンバーの無効化
   const handleDeactivateMember = async (member: Member) => {
     try {
-      const { error } = await supabase
+      const { error } = await createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      )
         .from('users')
         .update({
           registration_status: '99',
@@ -366,11 +482,6 @@ export default function MembersPage() {
   useEffect(() => {
     // 初期表示時の処理が必要な場合はここに記述
   }, [])
-
-  // 検索ボタンのクリックハンドラー
-  const handleSearch = () => {
-    fetchMembers(searchCriteria)
-  }
 
   const handleAddRow = () => {
     setEditingMembers([...editingMembers, { ...emptyMember, id: Date.now().toString() }])
@@ -414,18 +525,19 @@ export default function MembersPage() {
       // 新規データの保存
       for (const member of editingMembers) {
         // 新規メンバーを保存し、IDを直接取得
-        const { data: newMember, error: insertError } = await supabase
+        const { data: newMember, error: insertError } = await createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        )
           .from('users')
           .insert({
             employee_id: member.employee_id,
-            department: member.department,
+            branch: member.branch,
             last_name: member.last_name,
             first_name: member.first_name,
             last_name_en: member.last_name_en,
             first_name_en: member.first_name_en,
             email: member.email,
-            is_leader: member.is_leader || false,
-            is_admin: member.is_admin || false,
             registration_status: '01',
             is_active: true
           })
@@ -438,25 +550,31 @@ export default function MembersPage() {
         }
 
         // リーダー情報の保存
-        if (member.leader_id) {
-          const { error: leaderError } = await supabase
+        if (member.supervisor_info?.leader) {
+          const { error: leaderError } = await createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+          )
             .from('user_supervisors')
             .insert({
               user_id: newMember.id,
-              supervisor_id: member.leader_id,
-              supervisor_type_id: 1
+              pic_user_id: member.supervisor_info.leader,
+              supervisor_type: '01'
             })
           if (leaderError) throw leaderError
         }
 
         // サブリーダー情報の保存
-        if (member.sub_leader_id) {
-          const { error: subLeaderError } = await supabase
+        if (member.supervisor_info?.subleader) {
+          const { error: subLeaderError } = await createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+          )
             .from('user_supervisors')
             .insert({
               user_id: newMember.id,
-              supervisor_id: member.sub_leader_id,
-              supervisor_type_id: 2
+              pic_user_id: member.supervisor_info.subleader,
+              supervisor_type: '02'
             })
           if (subLeaderError) throw subLeaderError
         }
@@ -472,7 +590,7 @@ export default function MembersPage() {
 
       // 保存後のデータ再取得
       fetchMembers()
-      setEditingMembers([])
+    setEditingMembers([])
 
     } catch (error) {
       console.error('Error saving members:', error)
@@ -494,8 +612,8 @@ export default function MembersPage() {
       if (!member.employee_id) {
         errors.push({ field: 'employee_id', message: '社員番号は必須です。' })
       }
-      if (!member.department) {
-        errors.push({ field: 'department', message: '部署は必須です。' })
+      if (!member.branch) {
+        errors.push({ field: 'branch', message: '部署は必須です。' })
       }
       if (!member.last_name || !member.first_name) {
         errors.push({ field: 'name', message: '氏名は必須です。' })
@@ -538,7 +656,7 @@ export default function MembersPage() {
     setCurrentEditingMember(null)
   }
 
-  const openLeaderDialog = (memberId: string, field: 'leader' | 'subLeader') => {
+  const openLeaderDialog = (memberId: string, field: 'leader' | 'subleader') => {
     setCurrentEditingMember({ memberId, field })
     setLeaderDialogOpen(true)
   }
@@ -548,18 +666,20 @@ export default function MembersPage() {
       return <div className="px-2 py-1">{member[field] || ''}</div>
     }
 
-    if (field === 'department') {
+    if (field === 'branch') {
       return (
         <Select
           value={member[field] || ''}
           onValueChange={(value) => handleInputChange(member.id, field, value)}
         >
           <SelectTrigger className="h-9 w-full">
-            <SelectValue placeholder="選択" />
+            <SelectValue placeholder={t("select-branch")} />
           </SelectTrigger>
           <SelectContent>
-            {departments.map((dept) => (
-              <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+            {branches.map((branch) => (
+              <SelectItem key={branch.code} value={branch.code}>
+                {language === 'ja' ? branch.name_jp : branch.name_en}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -577,19 +697,19 @@ export default function MembersPage() {
       )
     }
 
-    if (field === 'leader_id' || field === 'sub_leader_id') {
+    if (field === 'leader' || field === 'subleader') {
       return (
         <div className="flex items-center gap-2">
           <Input
             value={member[field] || ''}
             readOnly
             className="h-9 flex-1"
-            placeholder={`${field === 'leader_id' ? '担当リーダー' : '担当サブリーダー'}を選択...`}
+            placeholder={`${field === 'leader' ? '担当リーダー' : '担当サブリーダー'}を選択...`}
           />
           <Button
             variant="outline"
             size="icon"
-            onClick={() => openLeaderDialog(member.id, field === 'leader_id' ? 'leader' : 'subLeader')}
+            onClick={() => openLeaderDialog(member.id, field === 'leader' ? 'leader' : 'subleader')}
             className="h-9 w-9 hover:bg-blue-50"
           >
             <UserPlus className="h-4 w-4 text-blue-600" />
@@ -611,7 +731,7 @@ export default function MembersPage() {
   const filteredMembers = members.filter(member => {
     const matchesEmployeeId = member.employee_id.toLowerCase().includes(leaderSearchCriteria.employeeId.toLowerCase())
     const matchesName = `${member.last_name}${member.first_name}`.toLowerCase().includes(leaderSearchCriteria.name.toLowerCase())
-    const matchesDepartment = leaderSearchCriteria.department === "all" || member.department === leaderSearchCriteria.department
+    const matchesDepartment = leaderSearchCriteria.department === "all" || member.branch === leaderSearchCriteria.department
     return matchesEmployeeId && matchesName && matchesDepartment
   })
 
@@ -620,7 +740,10 @@ export default function MembersPage() {
     const confirmed = window.confirm("対象のユーザーを無効化します。よろしいですか？")
     if (confirmed) {
       try {
-        const { error } = await supabase
+        const { error } = await createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        )
           .from('users')
           .update({ is_active: false, registration_status: '99' })
           .eq('id', member.id)
@@ -736,14 +859,14 @@ export default function MembersPage() {
   // テーブルヘッダーの定義を修正
   const tableHeaders = [
     { id: 'employee_id', label: t('employee-id') },
-    { id: 'department', label: t('department') },
+    { id: 'branch', label: t('department') },
     { id: 'last_name', label: t('last-name') },
     { id: 'first_name', label: t('first-name') },
     { id: 'last_name_en', label: t('last-name-en') },
     { id: 'first_name_en', label: t('first-name-en') },
     { id: 'email', label: t('email') },
     { id: 'leader', label: t('leader') },
-    { id: 'sub_leader', label: t('sub-leader') },
+    { id: 'subleader', label: t('sub-leader') },
     { id: 'leader_auth', label: t('leader-permission') },
     { id: 'admin_auth', label: t('admin-permission') },
     { id: 'status', label: t('member-status') },
@@ -787,6 +910,92 @@ export default function MembersPage() {
     )
   }
 
+  // fetchMembers 関数の追加
+  const fetchMembers = async () => {
+    setIsLoading(true)
+    try {
+      await handleSearch()
+    } catch (error) {
+      console.error('Error fetching members:', error)
+      toast({
+        title: "エラー",
+        description: "メンバー情報の取得に失敗しました",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // フィールド比較の修正
+  const isSpecialField = (field: string): boolean => {
+    return ['leader', 'subleader', 'is_leader', 'is_admin'].includes(field)
+  }
+
+  // 値の取得を修正
+  const getValue = (member: Member, field: string): any => {
+    if (field === 'leader' || field === 'subleader') {
+      return member.supervisor_info[field]
+    }
+    if (field === 'is_leader' || field === 'is_admin') {
+      return member.roles[field]
+    }
+    return member[field]
+  }
+
+  // スーパーバイザー更新関数
+  const updateSupervisor = async (
+    memberId: string,
+    supervisorId: string,
+    type: 'leader' | 'subleader'
+  ) => {
+    const supabase = newClient()
+    const { error } = await supabase
+      .from('user_supervisors')
+      .upsert({
+        user_id: memberId,
+        pic_user_id: supervisorId,
+        supervisor_type: type === 'leader' ? '01' : '02'
+      })
+    if (error) throw error
+  }
+
+  // スーパーバイザー削除関数
+  const removeSupervisor = async (
+    memberId: string,
+    type: 'leader' | 'subleader'
+  ) => {
+    const typeId = type === 'leader' ? 1 : 2
+    const supabase = newClient()
+    const { error } = await supabase
+      .from('user_supervisors')
+      .delete()
+      .match({ user_id: memberId, supervisor_type_id: typeId })
+    if (error) throw error
+  }
+
+  // handleSupervisorUpdate の修正
+  const handleSupervisorUpdate = async (
+    memberId: string,
+    supervisorId: string | null,
+    type: 'leader' | 'subleader'
+  ) => {
+    try {
+      if (!supervisorId) {
+        return
+      }
+      await updateSupervisor(memberId, supervisorId, type)
+      // ... 残りの処理
+    } catch (error) {
+      console.error('Error updating supervisor:', error)
+      toast({
+        title: "エラー",
+        description: "スーパーバイザーの更新に失敗しました",
+        variant: "destructive",
+      })
+    }
+  }
+
   return (
     <div className="space-y-6 relative z-[1]">
       <div>
@@ -808,16 +1017,19 @@ export default function MembersPage() {
               <div>
                 <label className="text-sm font-medium mb-2 block">{t("department")}</label>
                 <Select
-                  value={searchCriteria.department}
-                  onValueChange={(value) => setSearchCriteria({ ...searchCriteria, department: value })}
+                  value={searchCriteria.branch}
+                  onValueChange={(value) => 
+                    setSearchCriteria({ ...searchCriteria, branch: value })
+                  }
                 >
-                  <SelectTrigger className="w-40">
-                    <SelectValue placeholder={t("select-department")} />
+                  <SelectTrigger>
+                    <SelectValue placeholder={t("select-branch")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">{t("select-all")}</SelectItem>
-                    {departments.map((dept) => (
-                      <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                    {branches.map((branch) => (
+                      <SelectItem key={branch.code} value={branch.code}>
+                        {language === 'ja' ? branch.name_jp : branch.name_en}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -840,10 +1052,22 @@ export default function MembersPage() {
                   placeholder={t("enter-name")}
                 />
               </div>
-              <Button onClick={handleSearch} className="bg-blue-600 hover:bg-blue-700">
-                <Search className="h-4 w-4 mr-2" />
-                {t("search")}
-              </Button>
+              <div className="flex items-end gap-4">
+                <Button
+                  onClick={handleSearch}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  <Search className="h-4 w-4 mr-2" />
+                  検索
+                </Button>
+                <Button
+                  onClick={handleClearSearch}
+                  variant="outline"
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  クリア
+                </Button>
+              </div>
             </div>
 
             <div>
@@ -888,14 +1112,14 @@ export default function MembersPage() {
                         {members.map((member) => (
                           <TableRow key={member.id}>
                             <TableCell className="p-2">{renderInputField(member, 'employee_id', true)}</TableCell>
-                            <TableCell className="p-2">{renderInputField(member, 'department')}</TableCell>
+                            <TableCell className="p-2">{renderInputField(member, 'branch')}</TableCell>
                             <TableCell className="p-2">{renderInputField(member, 'last_name')}</TableCell>
                             <TableCell className="p-2">{renderInputField(member, 'first_name')}</TableCell>
                             <TableCell className="p-2">{renderInputField(member, 'last_name_en')}</TableCell>
                             <TableCell className="p-2">{renderInputField(member, 'first_name_en')}</TableCell>
                             <TableCell className="p-2">{renderInputField(member, 'email')}</TableCell>
-                            <TableCell className="p-2">{renderInputField(member, 'leader_id')}</TableCell>
-                            <TableCell className="p-2">{renderInputField(member, 'sub_leader_id')}</TableCell>
+                            <TableCell className="p-2">{renderInputField(member, 'leader')}</TableCell>
+                            <TableCell className="p-2">{renderInputField(member, 'subleader')}</TableCell>
                             <TableCell className="p-2">{renderInputField(member, 'is_leader')}</TableCell>
                             <TableCell className="p-2">{renderInputField(member, 'is_admin')}</TableCell>
                             <TableCell className="p-2">{getStatusText(member.registration_status)}</TableCell>
@@ -908,14 +1132,14 @@ export default function MembersPage() {
                         {editingMembers.map((member) => (
                           <TableRow key={member.id}>
                             <TableCell className="p-2">{renderInputField(member, 'employee_id')}</TableCell>
-                            <TableCell className="p-2">{renderInputField(member, 'department')}</TableCell>
+                            <TableCell className="p-2">{renderInputField(member, 'branch')}</TableCell>
                             <TableCell className="p-2">{renderInputField(member, 'last_name')}</TableCell>
                             <TableCell className="p-2">{renderInputField(member, 'first_name')}</TableCell>
                             <TableCell className="p-2">{renderInputField(member, 'last_name_en')}</TableCell>
                             <TableCell className="p-2">{renderInputField(member, 'first_name_en')}</TableCell>
                             <TableCell className="p-2">{renderInputField(member, 'email')}</TableCell>
-                            <TableCell className="p-2">{renderInputField(member, 'leader_id')}</TableCell>
-                            <TableCell className="p-2">{renderInputField(member, 'sub_leader_id')}</TableCell>
+                            <TableCell className="p-2">{renderInputField(member, 'leader')}</TableCell>
+                            <TableCell className="p-2">{renderInputField(member, 'subleader')}</TableCell>
                             <TableCell className="p-2">{renderInputField(member, 'is_leader')}</TableCell>
                             <TableCell className="p-2">{renderInputField(member, 'is_admin')}</TableCell>
                             <TableCell className="p-2">{member.registration_status}</TableCell>
@@ -965,7 +1189,7 @@ export default function MembersPage() {
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle>
-              {currentEditingMember?.field === 'leader_id' ? t("select-leader") : t("select-sub-leader")}
+              {currentEditingMember?.field === 'leader' ? t("select-leader") : t("select-sub-leader")}
             </DialogTitle>
             <DialogDescription>
               {t("select-member")}
@@ -985,8 +1209,10 @@ export default function MembersPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">{t("select-all")}</SelectItem>
-                    {departments.map((dept) => (
-                      <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                    {branches.map((dept) => (
+                      <SelectItem key={dept.code} value={dept.code}>
+                        {language === 'ja' ? dept.name_jp : dept.name_en}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -1025,7 +1251,7 @@ export default function MembersPage() {
                       <TableRow key={member.id} className="hover:bg-blue-50">
                         <TableCell className="py-1">{member.employee_id}</TableCell>
                         <TableCell className="py-1">{member.last_name} {member.first_name}</TableCell>
-                        <TableCell className="py-1">{member.department}</TableCell>
+                        <TableCell className="py-1">{member.branch}</TableCell>
                         <TableCell className="py-1">
                           <Button
                             onClick={() => handleLeaderSelect(member)}
