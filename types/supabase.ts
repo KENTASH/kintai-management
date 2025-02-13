@@ -9,6 +9,47 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
+      attendance_records: {
+        Row: {
+          id: string
+          user_id: string
+          date: string
+          start_time: string | null
+          end_time: string | null
+          break_time: string | null
+          type: string | null
+          remarks: string | null
+          late_early_hours: number | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          date: string
+          start_time?: string | null
+          end_time?: string | null
+          break_time?: string | null
+          type?: string | null
+          remarks?: string | null
+          late_early_hours?: number | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          date?: string
+          start_time?: string | null
+          end_time?: string | null
+          break_time?: string | null
+          type?: string | null
+          remarks?: string | null
+          late_early_hours?: number | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
       branch_master: {
         Row: {
           code: string
