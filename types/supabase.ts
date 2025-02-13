@@ -116,7 +116,7 @@ export interface Database {
           is_active?: boolean
           theme?: string
           language?: string
-          registration_status?: string | null
+          registration_status?: '01' | '02' | '03' | '99' | null
           created_at?: string
           updated_at?: string
           created_by?: string | null

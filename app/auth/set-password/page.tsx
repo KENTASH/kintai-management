@@ -6,7 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/use-toast"
-import { createClient } from "@/lib/supabaseClient"
+import { createClient } from "@supabase/supabase-js"
+import type { Database } from '@/types/supabase'
+
+const supabase = createClient<Database>(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 export default function SetPasswordPage() {
   const router = useRouter()
@@ -24,8 +30,6 @@ export default function SetPasswordPage() {
         throw new Error("パスワードが一致しません")
       }
 
-      const supabase = createClient()
-
       // パスワードを更新
       const { error: updateError } = await supabase.auth.updateUser({
         password: password
@@ -41,7 +45,9 @@ export default function SetPasswordPage() {
       if (user) {
         const { error: statusError } = await supabase
           .from('users')
-          .update({ registration_status: '03' })
+          .update({
+            registration_status: '03' as const
+          } satisfies Partial<Database['public']['Tables']['users']['Update']>)
           .eq('id', user.id)
 
         if (statusError) throw statusError
