@@ -31,6 +31,7 @@ import {
 import { useToast } from "@/components/ui/use-toast"
 import { AnimatePresence, motion } from "framer-motion"
 import { createClient as newClient } from '@/lib/supabaseClient'
+import { Database } from "@/types/supabase"
 
 interface Member {
   id: string
@@ -261,7 +262,7 @@ export default function MembersPage() {
     setIsLoading(true)
     try {
       // ブランチ情報のみを取得
-      const { data: branchData, error: branchError } = await supabase
+      const { data: branchData, error: branchError } = await newClient()
         .from('branch_master')
         .select('*')
         .order('code')
@@ -380,10 +381,7 @@ export default function MembersPage() {
   // 新規メンバーの追加
   const handleAddMember = async (member: Omit<Member, 'id'>) => {
     try {
-      const { data, error } = await createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      )
+      const { data, error } = await newClient()
         .from('users')
         .insert([{
           ...member,
@@ -414,17 +412,11 @@ export default function MembersPage() {
   const handleInviteMember = async (member: Member) => {
     try {
       // Supabaseの管理者招待APIを呼び出し
-      const { data, error } = await createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      ).auth.admin.inviteUserByEmail(member.email)
+      const { data, error } = await newClient().auth.admin.inviteUserByEmail(member.email)
       if (error) throw error
 
       // 登録ステータスを更新
-      const { error: updateError } = await createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      )
+      const { error: updateError } = await newClient()
         .from('users')
         .update({ registration_status: '02' })
         .eq('id', member.id)
@@ -450,10 +442,7 @@ export default function MembersPage() {
   // メンバーの無効化
   const handleDeactivateMember = async (member: Member) => {
     try {
-      const { error } = await createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      )
+      const { error } = await newClient()
         .from('users')
         .update({
           registration_status: '99',
@@ -519,18 +508,163 @@ export default function MembersPage() {
     }))
   }
 
-  // 保存処理を修正
+  // supabaseクライアントの初期化
+  const supabase = createClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+
+  // handleSave関数の完全な書き直し
   const handleSave = async () => {
+    setIsLoading(true)
+    
     try {
-      // 新規データの保存
-      for (const member of editingMembers) {
-        // 新規メンバーを保存し、IDを直接取得
-        const { data: newMember, error: insertError } = await createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        )
+      // バリデーション処理
+      const validationErrors = editingMembers.map(member => {
+        const errors: string[] = [];
+        
+        // システム必須項目のチェック
+        if (!member.employee_id) {
+          errors.push('社員番号は必須です');
+        }
+        
+        // 業務必須項目のチェック
+        const requiredFields = [
+          { field: 'branch', label: '部署' },
+          { field: 'last_name', label: '姓' },
+          { field: 'first_name', label: '名' },
+          { field: 'last_name_en', label: '姓(英語)' },
+          { field: 'first_name_en', label: '名(英語)' },
+          { field: 'email', label: 'メールアドレス' }
+        ];
+
+        requiredFields.forEach(({ field, label }) => {
+          if (!member[field as keyof typeof member]) {
+            errors.push(`${label}は必須です`);
+          }
+        });
+
+        return { member, errors };
+      });
+
+      const hasErrors = validationErrors.some(v => v.errors.length > 0);
+      if (hasErrors) {
+        const errorMessages = validationErrors
+          .filter(v => v.errors.length > 0)
+          .map(v => `${v.member.employee_id || '新規'}: ${v.errors.join(', ')}`)
+          .join('\n');
+        
+        toast({
+          title: "入力内容に不備があります",
+          description: errorMessages,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // 既存メンバーと新規メンバーの分離
+      const existingMembers = editingMembers.filter(member => member.id);
+      const newMembers = editingMembers.filter(member => !member.id);
+
+      // 1. 既存メンバーの更新処理
+      for (const member of existingMembers) {
+        // ユーザー基本情報の更新
+        const { error: updateError } = await supabase
+          .from('users')
+          .update({
+            branch: member.branch,
+            last_name: member.last_name,
+            first_name: member.first_name,
+            last_name_en: member.last_name_en,
+            first_name_en: member.first_name_en,
+            email: member.email
+          })
+          .eq('id', member.id)
+
+        if (updateError) throw updateError;
+
+        // リーダー情報の更新または削除
+        if (member.supervisor_info?.leader !== undefined) {
+          const { error: leaderError } = await supabase
+            .from('user_supervisors')
+            .upsert({
+              user_id: member.id,
+              pic_user_id: member.supervisor_info.leader,
+              supervisor_type: '01'
+            }, {
+              onConflict: 'user_id,supervisor_type'
+            })
+          if (leaderError) throw leaderError;
+        }
+
+        // サブリーダー情報の更新または削除
+        if (member.supervisor_info?.subleader !== undefined) {
+          const { error: subleaderError } = await supabase
+            .from('user_supervisors')
+            .upsert({
+              user_id: member.id,
+              pic_user_id: member.supervisor_info.subleader,
+              supervisor_type: '02'
+            }, {
+              onConflict: 'user_id,supervisor_type'
+            })
+          if (subleaderError) throw subleaderError;
+        }
+
+        // ロール情報の更新
+        if (member.supervisor_info?.leader_role !== undefined) {
+          if (member.supervisor_info.leader_role) {
+            const { error: roleError } = await supabase
+              .from('user_roles')
+              .upsert({
+                user_id: member.id,
+                user_role_id: 'leader'
+              })
+            if (roleError) throw roleError;
+          } else {
+            const { error: deleteError } = await supabase
+              .from('user_roles')
+              .delete()
+              .match({ user_id: member.id, user_role_id: 'leader' })
+            if (deleteError) throw deleteError;
+          }
+        }
+
+        // 管理者ロールの更新
+        if (member.supervisor_info?.admin_role !== undefined) {
+          if (member.supervisor_info.admin_role) {
+            const { error: roleError } = await supabase
+              .from('user_roles')
+              .upsert({
+                user_id: member.id,
+                user_role_id: 'admin'
+              })
+            if (roleError) throw roleError;
+          } else {
+            const { error: deleteError } = await supabase
+              .from('user_roles')
+              .delete()
+              .match({ user_id: member.id, user_role_id: 'admin' })
+            if (deleteError) throw deleteError;
+          }
+        }
+      }
+
+      // 2. 新規メンバーの登録処理
+      for (const member of newMembers) {
+        // auth.usersへの登録
+        const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
+          email: member.email,
+          email_confirm: true
+        })
+
+        if (authError) throw authError;
+
+        // public.usersへの登録
+        const { data: newUser, error: insertError } = await supabase
           .from('users')
           .insert({
+            auth_id: authUser.user.id,
             employee_id: member.employee_id,
             branch: member.branch,
             last_name: member.last_name,
@@ -538,71 +672,77 @@ export default function MembersPage() {
             last_name_en: member.last_name_en,
             first_name_en: member.first_name_en,
             email: member.email,
-            registration_status: '01',
-            is_active: true
+            registration_status: '01'
           })
           .select('id')
           .single()
 
-        if (insertError || !newMember) {
-          console.error('Error inserting member:', insertError)
-          throw new Error(`メンバーの保存中にエラーが発生しました: ${insertError?.message || 'Unknown error'}`)
-        }
+        if (insertError || !newUser) throw insertError;
 
-        // リーダー情報の保存
+        // 関連情報の登録
         if (member.supervisor_info?.leader) {
-          const { error: leaderError } = await createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-          )
+          const { error: leaderError } = await supabase
             .from('user_supervisors')
             .insert({
-              user_id: newMember.id,
+              user_id: newUser.id,
               pic_user_id: member.supervisor_info.leader,
               supervisor_type: '01'
             })
-          if (leaderError) throw leaderError
+          if (leaderError) throw leaderError;
         }
 
-        // サブリーダー情報の保存
         if (member.supervisor_info?.subleader) {
-          const { error: subLeaderError } = await createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-          )
+          const { error: subleaderError } = await supabase
             .from('user_supervisors')
             .insert({
-              user_id: newMember.id,
+              user_id: newUser.id,
               pic_user_id: member.supervisor_info.subleader,
               supervisor_type: '02'
             })
-          if (subLeaderError) throw subLeaderError
+          if (subleaderError) throw subleaderError;
+        }
+
+        if (member.supervisor_info?.leader_role) {
+          const { error: roleError } = await supabase
+            .from('user_roles')
+            .insert({
+              user_id: newUser.id,
+              user_role_id: 'leader'
+            })
+          if (roleError) throw roleError;
+        }
+
+        if (member.supervisor_info?.admin_role) {
+          const { error: roleError } = await supabase
+            .from('user_roles')
+            .insert({
+              user_id: newUser.id,
+              user_role_id: 'admin'
+            })
+          if (roleError) throw roleError;
         }
       }
 
-      setMessage({
-        type: 'success',
-        text: '正常に保存が完了しました。',
-        position: 'bottom',
-        alignment: 'center',
-        dismissible: true
-      })
+      toast({
+        title: "成功",
+        description: "保存が完了しました。",
+      });
 
-      // 保存後のデータ再取得
-      fetchMembers()
-    setEditingMembers([])
+      // データを再取得して状態をリセット
+      await fetchMembers();
+      setEditingMembers([]);
 
     } catch (error) {
-      console.error('Error saving members:', error)
-      setMessage({
-        type: 'error',
-        text: error instanceof Error ? error.message : '保存中に予期せぬエラーが発生しました。',
-        position: 'top',
-        alignment: 'left',
-        dismissible: true
-      })
+      console.error('Error saving members:', error);
+      toast({
+        title: "エラー",
+        description: "想定外のエラーが発生しました。",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
     }
-  }
+  };
 
   // バリデーション関数
   const validateMembers = (members: Member[]): ValidationError[] => {
@@ -740,10 +880,7 @@ export default function MembersPage() {
     const confirmed = window.confirm("対象のユーザーを無効化します。よろしいですか？")
     if (confirmed) {
       try {
-        const { error } = await createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        )
+        const { error } = await newClient()
           .from('users')
           .update({ is_active: false, registration_status: '99' })
           .eq('id', member.id)
@@ -914,7 +1051,14 @@ export default function MembersPage() {
   const fetchMembers = async () => {
     setIsLoading(true)
     try {
-      await handleSearch()
+      const { data, error } = await newClient()
+        .from('users')
+        .select('*')
+        .order('employee_id')
+
+      if (error) throw error
+      setMembers(data || [])
+
     } catch (error) {
       console.error('Error fetching members:', error)
       toast({
