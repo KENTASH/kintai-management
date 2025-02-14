@@ -19,8 +19,11 @@
     "incremental": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"]
-    },
+       "@/*": ["./*"],
+       "@/components/ui/*": ["components/ui/*"], // より具体的なパスを先に記述
+       "@/components/*": ["components/*"],
+       "@/lib/*": ["./lib/*"]
+},
     "plugins": [
       {
         "name": "next"

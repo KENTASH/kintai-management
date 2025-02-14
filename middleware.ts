@@ -1,39 +1,44 @@
-import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
   const res = NextResponse.next()
-  const supabase = createMiddlewareClient({ req: request, res })
   
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return request.cookies.get(name)?.value
+        },
+        set(name: string, value: string, options: CookieOptions) {
+          res.cookies.set({
+            name,
+            value,
+            ...options,
+          })
+        },
+        remove(name: string, options: CookieOptions) {
+          res.cookies.set({
+            name,
+            value: '',
+            ...options,
+          })
+        },
+      },
+    }
+  )
+
   try {
-    // セッションの取得と有効性チェック
-    const {
-      data: { session },
-      error
-    } = await supabase.auth.getSession()
+    const { data: { session } } = await supabase.auth.getSession()
 
-    // セッションエラーまたは無効な場合
-    if (error || !session?.user || !session?.expires_at) {
-      // 認証関連のストレージをクリア
-      res.cookies.delete('sb-access-token')
-      res.cookies.delete('sb-refresh-token')
-
-      // 現在のパスが認証画面でない場合はログイン画面へリダイレクト
+    if (!session) {
       const isAuthPath = ['/', '/auth/callback', '/auth/set-password'].includes(request.nextUrl.pathname)
       if (!isAuthPath) {
         return NextResponse.redirect(new URL('/', request.url))
       }
       return res
-    }
-
-    // セッションの有効期限をチェック
-    const expiresAt = new Date(session.expires_at * 1000)
-    if (expiresAt < new Date()) {
-      // セッションが期限切れの場合、ストレージをクリアしてログイン画面へ
-      res.cookies.delete('sb-access-token')
-      res.cookies.delete('sb-refresh-token')
-      return NextResponse.redirect(new URL('/', request.url))
     }
 
     // 以下、既存の認証済みユーザーの処理
@@ -43,10 +48,7 @@ export async function middleware(request: NextRequest) {
       .eq('auth_id', session.user.id)
       .maybeSingle()
 
-    if (userError) {
-      console.error('Error fetching user data:', userError)
-      throw userError
-    }
+    if (userError) throw userError
 
     // 初回パスワード設定が必要な場合
     if (userData?.registration_status === '01' && 
@@ -60,10 +62,8 @@ export async function middleware(request: NextRequest) {
     }
 
     return res
-
   } catch (error) {
     console.error('Middleware error:', error)
-    // エラーが発生した場合は安全のためログイン画面へ
     return NextResponse.redirect(new URL('/', request.url))
   }
 }
