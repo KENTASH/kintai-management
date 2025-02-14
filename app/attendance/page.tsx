@@ -366,7 +366,7 @@ export default function AttendancePage() {
                   <span className="font-medium">{summary.totalWorkTime}</span>
                 </div>
                 <div className="flex justify-between gap-2">
-                  <span className="text-muted-foreground">{t("late-early-days")}:</span>
+                  <span className="text-muted-foreground">{t("late-early-hours")}:</span>
                   <span className="font-medium">{summary.lateEarlyHours}{t("hours")}</span>
                 </div>
                 <div className="flex justify-between gap-2">

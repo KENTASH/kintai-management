@@ -32,29 +32,7 @@ import { useToast } from "@/components/ui/use-toast"
 import { AnimatePresence, motion } from "framer-motion"
 import { createClient as newClient } from '@/lib/supabaseClient'
 import { Database } from "@/types/supabase"
-
-interface Member {
-  id: string
-  employee_id: string
-  email: string
-  last_name: string
-  first_name: string
-  last_name_en: string | null
-  first_name_en: string | null
-  branch: string
-  branch_name: string
-  is_active: boolean
-  registration_status: string | null
-  supervisor_info: {
-    leader: string | null
-    subleader: string | null
-  }
-  roles: {
-    is_leader: boolean
-    is_admin: boolean
-  }
-  [key: string]: any  // インデックスシグネチャを追加
-}
+import type { Member, SupervisorInfo } from '@/types/supabase'
 
 interface Supervisor {
   supervisor_type_id: number
@@ -144,7 +122,7 @@ const statusMap: StatusMapType = {
   '99': { ja: '廃止済み', en: 'Deactivated' }
 }
 
-// UserDataの型定義を追加
+// UserDataの型定義を修正
 interface UserData {
   id: string
   employee_id: string
@@ -155,12 +133,15 @@ interface UserData {
   first_name_en: string | null
   branch: string
   is_active: boolean
-  registration_status: string | null
+  registration_status: string  // null を削除
   branch_master: Array<{
     name_jp: string
     name_en: string
   }>
 }
+
+// nullセーフな文字列変換のヘルパー関数を修正
+const safeString = (value: string | null | undefined, defaultValue = ""): string => value ?? defaultValue;
 
 export default function MembersPage() {
   const { t, language } = useI18n()
@@ -188,7 +169,7 @@ export default function MembersPage() {
     last_name_en: null,
     first_name_en: null,
     email: "",
-    registration_status: "01",
+    registration_status: "01",  // デフォルト値を設定
     is_active: true,
     supervisor_info: {
       leader: null,
@@ -539,7 +520,8 @@ export default function MembersPage() {
         ];
 
         requiredFields.forEach(({ field, label }) => {
-          if (!member[field as keyof typeof member]) {
+          const value = safeString(member[field as keyof typeof member]);
+          if (!value) {
             errors.push(`${label}は必須です`);
           }
         });
@@ -551,7 +533,7 @@ export default function MembersPage() {
       if (hasErrors) {
         const errorMessages = validationErrors
           .filter(v => v.errors.length > 0)
-          .map(v => `${v.member.employee_id || '新規'}: ${v.errors.join(', ')}`)
+          .map(v => `${safeString(v.member.employee_id) || '新規'}: ${v.errors.join(', ')}`)
           .join('\n');
         
         toast({
@@ -572,152 +554,65 @@ export default function MembersPage() {
         const { error: updateError } = await supabase
           .from('users')
           .update({
-            branch: member.branch,
-            last_name: member.last_name,
-            first_name: member.first_name,
-            last_name_en: member.last_name_en,
-            first_name_en: member.first_name_en,
-            email: member.email
+            branch: safeString(member.branch),
+            last_name: safeString(member.last_name),
+            first_name: safeString(member.first_name),
+            last_name_en: member.last_name_en,  // nullを許容する項目はそのまま
+            first_name_en: member.first_name_en, // nullを許容する項目はそのまま
+            email: safeString(member.email)
           })
-          .eq('id', member.id)
+          .eq('id', safeString(member.id))
 
         if (updateError) throw updateError;
 
-        // リーダー情報の更新または削除
-        if (member.supervisor_info?.leader !== undefined) {
-          const { error: leaderError } = await supabase
-            .from('user_supervisors')
+        // リーダー権限の更新処理
+        if (member.supervisor_info?.supervisor_type === '01') {
+          const { error: roleError } = await supabase
+            .from('user_roles')
             .upsert({
-              user_id: member.id,
-              pic_user_id: member.supervisor_info.leader,
-              supervisor_type: '01'
+              user_id: safeString(member.id),
+              user_role_id: 'leader'
             }, {
-              onConflict: 'user_id,supervisor_type'
+              onConflict: 'user_id,user_role_id'
             })
-          if (leaderError) throw leaderError;
-        }
-
-        // サブリーダー情報の更新または削除
-        if (member.supervisor_info?.subleader !== undefined) {
-          const { error: subleaderError } = await supabase
-            .from('user_supervisors')
-            .upsert({
-              user_id: member.id,
-              pic_user_id: member.supervisor_info.subleader,
-              supervisor_type: '02'
-            }, {
-              onConflict: 'user_id,supervisor_type'
-            })
-          if (subleaderError) throw subleaderError;
-        }
-
-        // ロール情報の更新
-        if (member.supervisor_info?.leader_role !== undefined) {
-          if (member.supervisor_info.leader_role) {
-            const { error: roleError } = await supabase
-              .from('user_roles')
-              .upsert({
-                user_id: member.id,
-                user_role_id: 'leader'
-              })
-            if (roleError) throw roleError;
-          } else {
-            const { error: deleteError } = await supabase
-              .from('user_roles')
-              .delete()
-              .match({ user_id: member.id, user_role_id: 'leader' })
-            if (deleteError) throw deleteError;
-          }
-        }
-
-        // 管理者ロールの更新
-        if (member.supervisor_info?.admin_role !== undefined) {
-          if (member.supervisor_info.admin_role) {
-            const { error: roleError } = await supabase
-              .from('user_roles')
-              .upsert({
-                user_id: member.id,
-                user_role_id: 'admin'
-              })
-            if (roleError) throw roleError;
-          } else {
-            const { error: deleteError } = await supabase
-              .from('user_roles')
-              .delete()
-              .match({ user_id: member.id, user_role_id: 'admin' })
-            if (deleteError) throw deleteError;
-          }
+          if (roleError) throw roleError;
         }
       }
 
       // 2. 新規メンバーの登録処理
       for (const member of newMembers) {
-        // auth.usersへの登録
         const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
-          email: member.email,
+          email: safeString(member.email),
           email_confirm: true
         })
 
         if (authError) throw authError;
 
-        // public.usersへの登録
         const { data: newUser, error: insertError } = await supabase
           .from('users')
           .insert({
             auth_id: authUser.user.id,
-            employee_id: member.employee_id,
-            branch: member.branch,
-            last_name: member.last_name,
-            first_name: member.first_name,
+            employee_id: safeString(member.employee_id),
+            branch: safeString(member.branch),
+            last_name: safeString(member.last_name),
+            first_name: safeString(member.first_name),
             last_name_en: member.last_name_en,
             first_name_en: member.first_name_en,
-            email: member.email,
-            registration_status: '01'
+            email: safeString(member.email),
+            registration_status: '01'  // 直接文字列として指定
           })
           .select('id')
           .single()
 
         if (insertError || !newUser) throw insertError;
 
-        // 関連情報の登録
-        if (member.supervisor_info?.leader) {
-          const { error: leaderError } = await supabase
-            .from('user_supervisors')
-            .insert({
-              user_id: newUser.id,
-              pic_user_id: member.supervisor_info.leader,
-              supervisor_type: '01'
-            })
-          if (leaderError) throw leaderError;
-        }
-
-        if (member.supervisor_info?.subleader) {
-          const { error: subleaderError } = await supabase
-            .from('user_supervisors')
-            .insert({
-              user_id: newUser.id,
-              pic_user_id: member.supervisor_info.subleader,
-              supervisor_type: '02'
-            })
-          if (subleaderError) throw subleaderError;
-        }
-
-        if (member.supervisor_info?.leader_role) {
+        // 新規メンバーのリーダー権限設定
+        if (member.supervisor_info?.supervisor_type === '01') {
           const { error: roleError } = await supabase
             .from('user_roles')
             .insert({
-              user_id: newUser.id,
+              user_id: safeString(newUser.id),
               user_role_id: 'leader'
-            })
-          if (roleError) throw roleError;
-        }
-
-        if (member.supervisor_info?.admin_role) {
-          const { error: roleError } = await supabase
-            .from('user_roles')
-            .insert({
-              user_id: newUser.id,
-              user_role_id: 'admin'
             })
           if (roleError) throw roleError;
         }
@@ -736,7 +631,7 @@ export default function MembersPage() {
       console.error('Error saving members:', error);
       toast({
         title: "エラー",
-        description: "想定外のエラーが発生しました。",
+        description: "保存に失敗しました",
         variant: "destructive",
       });
     } finally {

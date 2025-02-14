@@ -1,11 +1,11 @@
 "use client";
-import React from "react";
 import { createContext, useContext, useState, ReactNode } from "react";
 import { translations } from "./translations";
 
 type Language = "ja" | "en";
 
-type TranslationKeys = keyof typeof translations.ja;
+// TranslationKeysをexportして外部から使用可能に
+export type TranslationKeys = keyof typeof translations.ja;
 
 interface I18nContextType {
   language: Language;
@@ -13,13 +13,7 @@ interface I18nContextType {
   t: (key: TranslationKeys) => string;
 }
 
-const defaultValues: I18nContextType = {
-  language: "ja",
-  setLanguage: () => {}, // 空の関数を設定
-  t: (key: TranslationKeys) => translations["ja"][key] || key,
-};
-
-const I18nContext = createContext<I18nContextType>(defaultValues);
+const I18nContext = createContext<I18nContextType | null>(null);
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [language, setLanguage] = useState<Language>("ja");

@@ -11,7 +11,8 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Moon, Sun, Languages, Save } from "lucide-react"
-import { useI18n, TranslationKeys } from "@/lib/i18n/context"
+import { useI18n } from "@/lib/i18n/context"
+import type { TranslationKeys } from "@/lib/i18n/context"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useState } from "react"
 
@@ -38,7 +39,7 @@ const defaultValues = {
 }
 
 const departments = [
-  "NISZ浜松", "NISZ名古屋", "NISZ大阪", "NIS東京",
+  "NISZ浜松", "NISZ名古屋", "NISZ大阪", "NAL東京",
   "GRS大阪", "GRS名古屋", "GRS東京", "NAL名古屋",
 ]
 

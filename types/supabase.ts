@@ -155,4 +155,26 @@ export interface Database {
       [_ in never]: never
     }
   }
+}
+
+export interface SupervisorInfo {
+  leader: string | null;
+  subleader: string | null;
+  supervisor_type?: '01' | '02' | null; // オプショナルに変更
+}
+
+export interface Member {
+  id: string;
+  employee_id: string;
+  email: string;
+  last_name: string;
+  first_name: string;
+  last_name_en: string | null;
+  first_name_en: string | null;
+  branch: string;
+  branch_name: string;
+  is_active: boolean;
+  registration_status: string;  // null を削除
+  supervisor_info: SupervisorInfo;
+  [key: string]: any;
 } 

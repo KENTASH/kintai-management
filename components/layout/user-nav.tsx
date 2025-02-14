@@ -77,7 +77,6 @@ export function UserNav() {
         if (authError) throw authError
 
         if (user) {
-          // リレーションを正しく指定して取得
           const { data, error } = await supabase
             .from('users')
             .select(`
@@ -101,49 +100,22 @@ export function UserNav() {
 
           if (error) throw error
 
-          if (!data) {
-            toast({
-              title: "エラー",
-              description: "ユーザー情報が見つかりません",
-              variant: "destructive",
+          if (data) {
+            setUserData({
+              ...data,
+              branch_name: data.language === 'en_US'
+                ? data.branch_master[0]?.name_en ?? "Unknown"
+                : data.branch_master[0]?.name_jp ?? "不明",
             })
-            return
-          }
-
-          // UserDataの型に合わせてデータを整形
-          const userData: UserData = {
-            id: data.id,
-            auth_id: data.auth_id,
-            employee_id: data.employee_id,
-            branch: data.branch,
-            branch_name: data.language === 'en_US' 
-              ? data.branch_master.name_en 
-              : data.branch_master.name_jp,
-            last_name: data.last_name,
-            first_name: data.first_name,
-            last_name_en: data.last_name_en,
-            first_name_en: data.first_name_en,
-            avatar_url: data.avatar_url,
-            language: data.language
-          }
-
-          setUserData(userData)
-          if (userData.avatar_url) {
-            setSelectedAvatar(userData.avatar_url)
           }
         }
       } catch (error) {
         console.error('Error fetching user data:', error)
-        toast({
-          title: "エラー",
-          description: "ユーザー情報の取得に失敗しました",
-          variant: "destructive",
-        })
       }
     }
 
     fetchUserData()
-  }, [toast])
+  }, [])
 
   // getFullName関数を修正
   const getFullName = () => {
