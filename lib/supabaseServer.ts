@@ -7,14 +7,26 @@ export const supabase = createServerClient<Database>(
 	process.env.SUPABASE_SERVICE_ROLE_KEY!,
 	{
 		cookies: {
-			get(name: string) {
-				return cookies().get(name)?.value || null
+			get: async (name: string) => {
+				const cookieStore = await cookies()
+				return cookieStore.get(name)?.value || null
 			},
-			set(name: string, value: string, options: CookieOptions) {
-				cookies().set({ name, value, ...options })
+			set: async (name: string, value: string, options?: CookieOptions) => {
+				const cookieStore = await cookies()
+				cookieStore.set({ 
+					name, 
+					value, 
+					...options 
+				})
 			},
-			remove(name: string, options: CookieOptions) {
-				cookies().set({ name, value: '', ...options, expires: new Date(0) })
+			remove: async (name: string, options?: CookieOptions) => {
+				const cookieStore = await cookies()
+				cookieStore.set({ 
+					name, 
+					value: '', 
+					...options, 
+					expires: new Date(0) 
+				})
 			}
 		}
 	}
