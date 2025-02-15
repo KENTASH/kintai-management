@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { createClient } from "@/lib/supabaseClient"
+import { supabase } from '@/lib/supabaseClient'
 import { useI18n } from "@/lib/i18n/context"
 import { LogOut, Settings } from "lucide-react"
 import Image from "next/image"
@@ -24,6 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { useAuth } from "@/providers/AuthProvider"
 
 // アバターのサンプル画像
 const avatarSamples = [
@@ -60,7 +61,8 @@ interface UserData {
 }
 
 export function UserNav() {
-  const { t, language } = useI18n()
+  const { t } = useI18n()
+  const { session, loading } = useAuth()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [selectedAvatar, setSelectedAvatar] = useState(avatarSamples[0].url)
   const router = useRouter()
@@ -71,43 +73,38 @@ export function UserNav() {
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        const supabase = createClient()
-        
-        const { data: { user }, error: authError } = await supabase.auth.getUser()
-        if (authError) throw authError
+        if (!session?.user) return
 
-        if (user) {
-          const { data, error } = await supabase
-            .from('users')
-            .select(`
-              id,
-              auth_id,
-              employee_id,
-              last_name,
-              first_name,
-              last_name_en,
-              first_name_en,
-              branch,
-              avatar_url,
-              language,
-              branch_master:branch_master!users_branch_fkey (
-                name_jp,
-                name_en
-              )
-            `)
-            .eq('auth_id', user.id)
-            .single()
+        const { data, error } = await supabase
+          .from('users')
+          .select(`
+            id,
+            auth_id,
+            employee_id,
+            last_name,
+            first_name,
+            last_name_en,
+            first_name_en,
+            branch,
+            avatar_url,
+            language,
+            branch_master:branch_master!users_branch_fkey (
+              name_jp,
+              name_en
+            )
+          `)
+          .eq('auth_id', session.user.id)
+          .single()
 
-          if (error) throw error
+        if (error) throw error
 
-          if (data) {
-            setUserData({
-              ...data,
-              branch_name: data.language === 'en_US'
-                ? data.branch_master[0]?.name_en ?? "Unknown"
-                : data.branch_master[0]?.name_jp ?? "不明",
-            })
-          }
+        if (data) {
+          setUserData({
+            ...data,
+            branch_name: data.language === 'en_US'
+              ? data.branch_master[0]?.name_en ?? "Unknown"
+              : data.branch_master[0]?.name_jp ?? "不明",
+          })
         }
       } catch (error) {
         console.error('Error fetching user data:', error)
@@ -115,7 +112,7 @@ export function UserNav() {
     }
 
     fetchUserData()
-  }, [])
+  }, [session])
 
   // getFullName関数を修正
   const getFullName = () => {
@@ -128,7 +125,6 @@ export function UserNav() {
   const handleLogout = async () => {
     try {
       setIsLoading(true)
-      const supabase = createClient()
 
       // セッションを破棄
       const { error } = await supabase.auth.signOut()

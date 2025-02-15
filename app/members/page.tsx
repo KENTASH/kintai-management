@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/dialog"
 import { useToast } from "@/components/ui/use-toast"
 import { AnimatePresence, motion } from "framer-motion"
-import { createClient as newClient } from '@/lib/supabaseClient'
+import { supabase } from '@/lib/supabaseClient'
 import { Database } from "@/types/supabase"
 import type { Member, SupervisorInfo } from '@/types/supabase'
 
@@ -205,7 +205,6 @@ export default function MembersPage() {
   // 所属マスタの取得
   useEffect(() => {
     const initializeBranches = async () => {
-      const supabase = newClient()
       try {
         const { data: branchData } = await supabase
           .from('branch_master')
@@ -243,10 +242,11 @@ export default function MembersPage() {
     setIsLoading(true)
     try {
       // ブランチ情報のみを取得
-      const { data: branchData, error: branchError } = await newClient()
-        .from('branch_master')
-        .select('*')
-        .order('code')
+      const { data: branchData, error: branchError } = await supabase
+  .from('branch_master')
+  .select('*')
+  .order('code')
+
 
       if (branchError) throw branchError
       setBranches(branchData)
@@ -266,7 +266,25 @@ export default function MembersPage() {
   // 検索処理の実装
   const handleSearch = async () => {
     setIsLoading(true)
-    const supabase = newClient()
+    let query = supabase
+  .from('users')
+  .select(`
+    id,
+    employee_id,
+    email,
+    last_name,
+    first_name,
+    last_name_en,
+    first_name_en,
+    branch,
+    is_active,
+    registration_status,
+    branch_master!inner (
+      name_jp,
+      name_en
+    )
+  `)
+
 
     try {
       let query = supabase
@@ -362,14 +380,15 @@ export default function MembersPage() {
   // 新規メンバーの追加
   const handleAddMember = async (member: Omit<Member, 'id'>) => {
     try {
-      const { data, error } = await newClient()
-        .from('users')
-        .insert([{
-          ...member,
-          registration_status: '01',
-          is_active: true
-        }])
-        .select()
+      const { data, error } = await supabase
+  .from('users')
+  .insert([{
+    ...member,
+    registration_status: '01',
+    is_active: true
+  }])
+  .select()
+
 
       if (error) throw error
       
@@ -393,11 +412,12 @@ export default function MembersPage() {
   const handleInviteMember = async (member: Member) => {
     try {
       // Supabaseの管理者招待APIを呼び出し
-      const { data, error } = await newClient().auth.admin.inviteUserByEmail(member.email)
+      const { data, error } = await supabase.auth.admin.inviteUserByEmail(member.email)
+
       if (error) throw error
 
       // 登録ステータスを更新
-      const { error: updateError } = await newClient()
+      const { error: updateError } = await supabase
         .from('users')
         .update({ registration_status: '02' })
         .eq('id', member.id)
@@ -423,13 +443,14 @@ export default function MembersPage() {
   // メンバーの無効化
   const handleDeactivateMember = async (member: Member) => {
     try {
-      const { error } = await newClient()
-        .from('users')
-        .update({
-          registration_status: '99',
-          is_active: false
-        })
-        .eq('id', member.id)
+      const { error } = await supabase
+  .from('users')
+  .update({
+    registration_status: '99',
+    is_active: false
+  })
+  .eq('id', member.id)
+
 
       if (error) throw error
 
@@ -775,7 +796,7 @@ export default function MembersPage() {
     const confirmed = window.confirm("対象のユーザーを無効化します。よろしいですか？")
     if (confirmed) {
       try {
-        const { error } = await newClient()
+        const { error } = await supabase
           .from('users')
           .update({ is_active: false, registration_status: '99' })
           .eq('id', member.id)
@@ -946,10 +967,11 @@ export default function MembersPage() {
   const fetchMembers = async () => {
     setIsLoading(true)
     try {
-      const { data, error } = await newClient()
-        .from('users')
-        .select('*')
-        .order('employee_id')
+      const { data, error } = await supabase
+  .from('users')
+  .select('*')
+  .order('employee_id')
+
 
       if (error) throw error
       setMembers(data || [])
@@ -988,8 +1010,7 @@ export default function MembersPage() {
     supervisorId: string,
     type: 'leader' | 'subleader'
   ) => {
-    const supabase = newClient()
-    const { error } = await supabase
+      const { error } = await supabase
       .from('user_supervisors')
       .upsert({
         user_id: memberId,
@@ -1005,7 +1026,6 @@ export default function MembersPage() {
     type: 'leader' | 'subleader'
   ) => {
     const typeId = type === 'leader' ? 1 : 2
-    const supabase = newClient()
     const { error } = await supabase
       .from('user_supervisors')
       .delete()

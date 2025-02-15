@@ -10,13 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Clock, Save } from "lucide-react"
 import { useI18n } from "@/lib/i18n/context"
-import { createClient } from '@supabase/supabase-js'
-
-// Supabaseクライアントの初期化
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import { supabase } from '@/lib/supabaseClient'
 
 // ダミーユーザーデータ
 const dummyUser = {

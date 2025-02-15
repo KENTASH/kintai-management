@@ -6,6 +6,7 @@ import { MainLayout } from "@/components/layout/main-layout";
 import { I18nProvider } from "@/lib/i18n/context";
 import { Toaster } from "@/components/ui/toaster";
 import type { Metadata } from 'next';
+import { AuthProvider } from "@/providers/AuthProvider";
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -25,17 +26,19 @@ export default function RootLayout({
   return (
     <html lang="ja" suppressHydrationWarning>
       <body className={inter.className}>
-        <I18nProvider>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="light"
-            enableSystem
-            disableTransitionOnChange
-          >
-            <MainLayout>{children}</MainLayout>
-            <Toaster />
-          </ThemeProvider>
-        </I18nProvider>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <I18nProvider>
+            <AuthProvider>
+              <MainLayout>{children}</MainLayout>
+              <Toaster />
+            </AuthProvider>
+          </I18nProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

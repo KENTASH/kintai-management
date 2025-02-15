@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { useI18n } from "@/lib/i18n/context"
 import { LogIn, Eye, EyeOff } from "lucide-react"
-import { createClient } from "@/lib/supabaseClient"
+import { supabase } from '@/lib/supabaseClient'
 import { useToast } from "@/components/ui/use-toast"
 
 export default function LoginPage() {
@@ -26,7 +26,6 @@ export default function LoginPage() {
     setError(null)
 
     try {
-      const supabase = createClient()
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
