@@ -1,7 +1,8 @@
 "use client"
 
-import { DashboardContent } from "@/components/dashboard/dashboard-content"
 import { useAuth } from "@/providers/AuthProvider"
+import { MainLayout } from "@/components/layout/main-layout"
+import { DashboardContent } from "@/components/dashboard/dashboard-content"
 
 export default function DashboardPage() {
   const { session } = useAuth()
@@ -10,5 +11,10 @@ export default function DashboardPage() {
     return null
   }
 
-  return <DashboardContent />
+  // MainLayoutをここで適用し、DashboardContentを表示
+  return (
+    <MainLayout>
+      <DashboardContent />
+    </MainLayout>
+  )
 }
