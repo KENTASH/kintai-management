@@ -54,8 +54,8 @@ interface UserData {
   branch_name: string
   last_name: string
   first_name: string
-  last_name_en: string
-  first_name_en: string
+  last_name_en: string | null
+  first_name_en: string | null
   avatar_url: string | null
   language: string | null
 }
@@ -73,8 +73,11 @@ export function UserNav() {
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        if (!session?.user) return
+        // セッションの取得
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) return
 
+        // ユーザー情報の取得
         const { data, error } = await supabase
           .from('users')
           .select(`
@@ -112,7 +115,20 @@ export function UserNav() {
     }
 
     fetchUserData()
-  }, [session])
+
+    // 認証状態の変更を監視
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        fetchUserData()
+      } else {
+        setUserData(null)
+      }
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [])
 
   // getFullName関数を修正
   const getFullName = () => {
@@ -125,30 +141,30 @@ export function UserNav() {
   const handleLogout = async () => {
     try {
       setIsLoading(true)
-
+  
       // セッションを破棄
       const { error } = await supabase.auth.signOut()
       if (error) throw error
-
+  
       // ブラウザのストレージをクリア
       sessionStorage.clear()
       localStorage.clear()
-
+  
       // クッキーをクリア
       document.cookie.split(";").forEach((c) => {
         document.cookie = c
           .replace(/^ +/, "")
           .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/")
       })
-
+  
       toast({
         title: "ログアウト成功",
         description: "ログアウトしました",
       })
-
-      // 完全なページリロードでログイン画面に遷移
-      window.location.href = "/"
-
+  
+      // 🔹 修正: `/` ではなく `/auth/login` へリダイレクト
+      window.location.href = "/auth/login";
+  
     } catch (error) {
       console.error("Logout error:", error)
       toast({
@@ -160,6 +176,7 @@ export function UserNav() {
       setIsLoading(false)
     }
   }
+  
 
   return (
     <>

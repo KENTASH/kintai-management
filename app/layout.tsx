@@ -2,11 +2,10 @@
 import './globals.css';
 import { Inter } from 'next/font/google';
 import { ThemeProvider } from "@/components/theme-provider";
-import { MainLayout } from "@/components/layout/main-layout";
 import { I18nProvider } from "@/lib/i18n/context";
 import { Toaster } from "@/components/ui/toaster";
 import type { Metadata } from 'next';
-import { AuthProvider } from "@/providers/AuthProvider";
+import { AuthLayout } from "@/components/layout/auth-layout";
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -33,10 +32,10 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <I18nProvider>
-            <AuthProvider>
-              <MainLayout>{children}</MainLayout>
+            <AuthLayout>
+              {children}
               <Toaster />
-            </AuthProvider>
+            </AuthLayout>
           </I18nProvider>
         </ThemeProvider>
       </body>

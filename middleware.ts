@@ -1,74 +1,26 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
-import { NextResponse, type NextRequest } from 'next/server'
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
 export async function middleware(request: NextRequest) {
-  const res = NextResponse.next()
-  
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value
-        },
-        set(name: string, value: string, options: CookieOptions) {
-          res.cookies.set({
-            name,
-            value,
-            ...options,
-          })
-        },
-        remove(name: string, options: CookieOptions) {
-          res.cookies.set({
-            name,
-            value: '',
-            ...options,
-          })
-        },
-      },
-    }
-  )
+  const { pathname } = request.nextUrl;
 
-  try {
-    const { data: { session } } = await supabase.auth.getSession()
+  // 認証が不要なルートのリスト
+  const publicRoutes = ["/auth/login", "/auth/set-password"];
 
-    if (!session) {
-      const isAuthPath = ['/', '/auth/callback', '/auth/set-password'].includes(request.nextUrl.pathname)
-      if (!isAuthPath) {
-        return NextResponse.redirect(new URL('/', request.url))
-      }
-      return res
-    }
+  // Cookie から `sb-access-token` を取得
+  const cookies = request.headers.get("cookie") || "";
+  const accessToken = cookies.split("; ").find(row => row.startsWith("sb-access-token="))?.split("=")[1];
 
-    // 以下、既存の認証済みユーザーの処理
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('registration_status')
-      .eq('auth_id', session.user.id)
-      .maybeSingle()
+  console.log("🔍 Middleware 認証チェック:", accessToken ? "トークンあり" : "なし");
 
-    if (userError) throw userError
-
-    // 初回パスワード設定が必要な場合
-    if (userData?.registration_status === '01' && 
-        request.nextUrl.pathname !== '/auth/set-password') {
-      return NextResponse.redirect(new URL('/auth/set-password', request.url))
-    }
-
-    // ログイン済みユーザーがログインページにアクセスした場合
-    if (request.nextUrl.pathname === '/') {
-      return NextResponse.redirect(new URL('/dashboard', request.url))
-    }
-
-    return res
-  } catch (error) {
-    console.error('Middleware error:', error)
-    return NextResponse.redirect(new URL('/', request.url))
+  if (!accessToken && !publicRoutes.includes(pathname)) {
+    console.log("🔐 未認証のため /auth/login にリダイレクト");
+    return NextResponse.redirect(new URL("/auth/login", request.url));
   }
+
+  return NextResponse.next();
 }
 
-// ミドルウェアを適用するパスを指定
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
-} 
+  matcher: ["/dashboard/:path*", "/settings/:path*", "/members/:path*", "/approve-attendance/:path*", "/overtime/:path*"]
+};

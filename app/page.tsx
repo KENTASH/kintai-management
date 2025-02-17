@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -20,54 +20,67 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // 初期ロード時に認証状態をチェック
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        router.push("/dashboard")
+      }
+    }
+    checkSession()
+  }, [router])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
     setError(null)
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      // ログイン処理
+      const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
-      if (error) {
+      if (signInError) {
         setError("メールアドレスかパスワードが間違っています。")
-        setIsLoading(false)
         return
       }
 
+      // セッションの取得を確認
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
         setError("セッションの取得に失敗しました")
-        setIsLoading(false)
         return
       }
 
-      const { data: profile } = await supabase
-        .from('users')
-        .select('registration_status')
-        .eq('auth_id', session.user.id)
-        .single()
+      // セッションが確実に設定されるのを待つ
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
+      // ダッシュボードへ遷移
+      window.location.href = "/dashboard"
 
-      toast({
-        title: "ログイン成功",
-        description: "ダッシュボードに移動します",
-      })
-
-      router.refresh()
-
-      if (profile?.registration_status === '01') {
-        router.push("/set-password")
-      } else {
-        router.push("/dashboard")
-      }
     } catch (error) {
       console.error('Login error:', error)
-      setError("メールアドレスかパスワードが間違っています。")
+      setError("ログイン処理中にエラーが発生しました")
+    } finally {
       setIsLoading(false)
     }
   }
+
+  // 認証状態の変更を監視
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        router.push("/dashboard")
+      }
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [router])
 
   return (
     <div className="flex h-[calc(100vh-8rem)] items-center justify-center">
