@@ -30,9 +30,9 @@ import {
 } from "@/components/ui/dialog"
 import { useToast } from "@/components/ui/use-toast"
 import { AnimatePresence, motion } from "framer-motion"
-import { supabase } from '@/lib/supabaseClient'
+import { createClient as newClient } from '@/lib/supabaseClient'
 import { Database } from "@/types/supabase"
-import type { Member, SupervisorInfo } from '@/types/supabase'
+import type { SupervisorInfo } from '@/types/supabase'
 
 interface Supervisor {
   supervisor_type_id: number
@@ -143,6 +143,58 @@ interface UserData {
 // nullセーフな文字列変換のヘルパー関数を修正
 const safeString = (value: string | null | undefined, defaultValue = ""): string => value ?? defaultValue;
 
+// データベースの型定義を拡張
+type RawUser = Database['public']['Tables']['users']['Row']
+
+// branch_masterを含むユーザー型を定義
+type UserWithBranch = RawUser & {
+  branch_master?: Array<{
+    name_jp: string;
+    name_en: string;
+  } | null>;
+}
+
+// Member型を修正
+type Member = {
+  id: string;
+  employee_id: string;
+  email: string;
+  last_name: string;
+  first_name: string;
+  last_name_en: string | null;
+  first_name_en: string | null;
+  branch: string;
+  branch_name: string;
+  registration_status: string;
+  is_active: boolean;
+  supervisor_info: {
+    leader: null | string;
+    subleader: null | string;
+    supervisor_type?: string;  // supervisor_typeを追加
+  };
+  roles: {
+    is_leader: boolean;
+    is_admin: boolean;
+  };
+  [key: string]: any;  // インデックスシグネチャを追加
+}
+
+// フィールド型を定義
+type MemberField = keyof Member | 'leader' | 'subleader' | 'is_leader' | 'is_admin';
+
+// フォーマット済みメンバー型を定義
+type FormattedMember = RawUser & {
+  branch_name: string;
+  supervisor_info: {
+    leader: null;
+    subleader: null;
+  };
+  roles: {
+    is_leader: boolean;
+    is_admin: boolean;
+  };
+}
+
 export default function MembersPage() {
   const { t, language } = useI18n()
   const { toast } = useToast()
@@ -160,20 +212,21 @@ export default function MembersPage() {
   const [hasSearched, setHasSearched] = useState(false)  // 検索実行フラグを追加
 
   const emptyMember: Member = {
-    id: "",
-    employee_id: "",
-    branch: "",
-    branch_name: "",
-    last_name: "",
-    first_name: "",
+    id: '',
+    employee_id: '',  // 空文字列で初期化
+    email: '',
+    last_name: '',
+    first_name: '',
     last_name_en: null,
     first_name_en: null,
-    email: "",
-    registration_status: "01",  // デフォルト値を設定
+    branch: '',
+    branch_name: '',
+    registration_status: '01',
     is_active: true,
     supervisor_info: {
       leader: null,
-      subleader: null
+      subleader: null,
+      supervisor_type: '01'
     },
     roles: {
       is_leader: false,
@@ -205,6 +258,7 @@ export default function MembersPage() {
   // 所属マスタの取得
   useEffect(() => {
     const initializeBranches = async () => {
+      const supabase = newClient()
       try {
         const { data: branchData } = await supabase
           .from('branch_master')
@@ -242,11 +296,10 @@ export default function MembersPage() {
     setIsLoading(true)
     try {
       // ブランチ情報のみを取得
-      const { data: branchData, error: branchError } = await supabase
-  .from('branch_master')
-  .select('*')
-  .order('code')
-
+      const { data: branchData, error: branchError } = await newClient()
+        .from('branch_master')
+        .select('*')
+        .order('code')
 
       if (branchError) throw branchError
       setBranches(branchData)
@@ -266,25 +319,7 @@ export default function MembersPage() {
   // 検索処理の実装
   const handleSearch = async () => {
     setIsLoading(true)
-    let query = supabase
-  .from('users')
-  .select(`
-    id,
-    employee_id,
-    email,
-    last_name,
-    first_name,
-    last_name_en,
-    first_name_en,
-    branch,
-    is_active,
-    registration_status,
-    branch_master!inner (
-      name_jp,
-      name_en
-    )
-  `)
-
+    const supabase = newClient()
 
     try {
       let query = supabase
@@ -321,12 +356,22 @@ export default function MembersPage() {
 
       if (usersError) throw usersError
 
-      const formattedUsers = users?.map(user => ({
-        ...user,
+      const formattedUsers = (users as UserWithBranch[])?.map(user => ({
+        id: user.id,
+        employee_id: user.employee_id,
+        email: user.email,
+        last_name: user.last_name,
+        first_name: user.first_name,
+        last_name_en: user.last_name_en,
+        first_name_en: user.first_name_en,
+        branch: user.branch,
         branch_name: user.branch_master?.[0]?.name_jp || '',
+        registration_status: user.registration_status || '01',
+        is_active: user.is_active,
         supervisor_info: {
           leader: null,
-          subleader: null
+          subleader: null,
+          supervisor_type: '01'  // デフォルト値を設定
         },
         roles: {
           is_leader: false,
@@ -380,15 +425,14 @@ export default function MembersPage() {
   // 新規メンバーの追加
   const handleAddMember = async (member: Omit<Member, 'id'>) => {
     try {
-      const { data, error } = await supabase
-  .from('users')
-  .insert([{
-    ...member,
-    registration_status: '01',
-    is_active: true
-  }])
-  .select()
-
+      const { data, error } = await newClient()
+        .from('users')
+        .insert([{
+          ...member,
+          registration_status: '01',
+          is_active: true
+        }])
+        .select()
 
       if (error) throw error
       
@@ -412,12 +456,11 @@ export default function MembersPage() {
   const handleInviteMember = async (member: Member) => {
     try {
       // Supabaseの管理者招待APIを呼び出し
-      const { data, error } = await supabase.auth.admin.inviteUserByEmail(member.email)
-
+      const { data, error } = await newClient().auth.admin.inviteUserByEmail(member.email)
       if (error) throw error
 
       // 登録ステータスを更新
-      const { error: updateError } = await supabase
+      const { error: updateError } = await newClient()
         .from('users')
         .update({ registration_status: '02' })
         .eq('id', member.id)
@@ -443,14 +486,13 @@ export default function MembersPage() {
   // メンバーの無効化
   const handleDeactivateMember = async (member: Member) => {
     try {
-      const { error } = await supabase
-  .from('users')
-  .update({
-    registration_status: '99',
-    is_active: false
-  })
-  .eq('id', member.id)
-
+      const { error } = await newClient()
+        .from('users')
+        .update({
+          registration_status: '99',
+          is_active: false
+        })
+        .eq('id', member.id)
 
       if (error) throw error
 
@@ -717,9 +759,15 @@ export default function MembersPage() {
     setLeaderDialogOpen(true)
   }
 
-  const renderInputField = (member: Member, field: keyof Member, isExisting: boolean = false) => {
-    if (isExisting && field === 'employee_id') {
-      return <div className="px-2 py-1">{member[field] || ''}</div>
+  const renderInputField = (member: Member, field: MemberField) => {
+    if (field === 'employee_id') {
+      return (
+        <Input
+          value={member.employee_id || ''}
+          onChange={(e) => handleInputChange(member.id, 'employee_id', e.target.value)}
+          className="w-full"
+        />
+      )
     }
 
     if (field === 'branch') {
@@ -796,7 +844,7 @@ export default function MembersPage() {
     const confirmed = window.confirm("対象のユーザーを無効化します。よろしいですか？")
     if (confirmed) {
       try {
-        const { error } = await supabase
+        const { error } = await newClient()
           .from('users')
           .update({ is_active: false, registration_status: '99' })
           .eq('id', member.id)
@@ -963,28 +1011,54 @@ export default function MembersPage() {
     )
   }
 
-  // fetchMembers 関数の追加
+  // メンバー一覧を取得する関数を修正
   const fetchMembers = async () => {
-    setIsLoading(true)
     try {
-      const { data, error } = await supabase
-  .from('users')
-  .select('*')
-  .order('employee_id')
+      const { data: users, error: usersError } = await supabase
+        .from('users')
+        .select(`
+          *,
+          branch_master (
+            name_jp,
+            name_en
+          )
+        `)
 
+      if (usersError) throw usersError
 
-      if (error) throw error
-      setMembers(data || [])
+      const formattedUsers = (users as UserWithBranch[])?.map(user => ({
+        id: user.id,
+        employee_id: user.employee_id,
+        email: user.email,
+        last_name: user.last_name,
+        first_name: user.first_name,
+        last_name_en: user.last_name_en,
+        first_name_en: user.first_name_en,
+        branch: user.branch,
+        branch_name: user.branch_master?.[0]?.name_jp || '',
+        registration_status: user.registration_status || '01',
+        is_active: user.is_active,
+        supervisor_info: {
+          leader: null,
+          subleader: null,
+          supervisor_type: '01'  // デフォルト値を設定
+        },
+        roles: {
+          is_leader: false,
+          is_admin: false
+        }
+      })) as Member[]
 
+      setMembers(formattedUsers || [])
+      setOriginalMembers(formattedUsers || [])
+      
     } catch (error) {
       console.error('Error fetching members:', error)
       toast({
         title: "エラー",
-        description: "メンバー情報の取得に失敗しました",
+        description: "メンバー一覧の取得に失敗しました",
         variant: "destructive",
       })
-    } finally {
-      setIsLoading(false)
     }
   }
 
@@ -1010,7 +1084,8 @@ export default function MembersPage() {
     supervisorId: string,
     type: 'leader' | 'subleader'
   ) => {
-      const { error } = await supabase
+    const supabase = newClient()
+    const { error } = await supabase
       .from('user_supervisors')
       .upsert({
         user_id: memberId,
@@ -1026,6 +1101,7 @@ export default function MembersPage() {
     type: 'leader' | 'subleader'
   ) => {
     const typeId = type === 'leader' ? 1 : 2
+    const supabase = newClient()
     const { error } = await supabase
       .from('user_supervisors')
       .delete()
@@ -1170,7 +1246,7 @@ export default function MembersPage() {
                       <TableBody>
                         {members.map((member) => (
                           <TableRow key={member.id}>
-                            <TableCell className="p-2">{renderInputField(member, 'employee_id', true)}</TableCell>
+                            <TableCell className="p-2">{renderInputField(member, 'employee_id')}</TableCell>
                             <TableCell className="p-2">{renderInputField(member, 'branch')}</TableCell>
                             <TableCell className="p-2">{renderInputField(member, 'last_name')}</TableCell>
                             <TableCell className="p-2">{renderInputField(member, 'first_name')}</TableCell>

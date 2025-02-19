@@ -32,7 +32,7 @@ const sidebarNavItems: SidebarNavItem[] = [
   {
     titleKey: "dashboard",
     descriptionKey: "dashboard-description",
-    href: "/",
+    href: "/dashboard",
     icon: LayoutDashboard,
   },
   {

@@ -19,7 +19,8 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
         const { data: { session } } = await supabase.auth.getSession();
         console.log("✅ 認証チェック結果:", session);
         setIsAuthenticated(!!session);
-        if (session) {
+        
+        if (session && isLoginPage) {
           router.push("/dashboard");
         }
       } catch (error) {
@@ -33,7 +34,8 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       console.log("🔄 認証状態変更:", _event, session);
       setIsAuthenticated(!!session);
-      if (session) {
+      
+      if (session && isLoginPage) {
         router.push("/dashboard");
       }
     });
@@ -41,7 +43,7 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
     return () => {
       subscription.unsubscribe();
     };
-  }, [router]);
+  }, [router, isLoginPage]);
 
   if (isLoginPage) {
     return <div className="min-h-screen bg-blue-50 dark:bg-blue-950">{children}</div>;
