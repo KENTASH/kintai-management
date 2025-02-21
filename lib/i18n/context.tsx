@@ -6,11 +6,12 @@ type Language = "ja" | "en";
 
 // TranslationKeysをexportして外部から使用可能に
 export type TranslationKeys = keyof typeof translations.ja;
+type TranslationValues = typeof translations.ja;
 
 interface I18nContextType {
   language: Language;
   setLanguage: (lang: Language) => void;
-  t: (key: TranslationKeys) => string;
+  t: (key: TranslationKeys, params?: Record<string, number | string>) => string;
 }
 
 const I18nContext = createContext<I18nContextType | null>(null);
@@ -18,8 +19,17 @@ const I18nContext = createContext<I18nContextType | null>(null);
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [language, setLanguage] = useState<Language>("ja");
 
-  const t = (key: TranslationKeys): string => {
-    return translations[language][key] || key;
+  const t = (key: TranslationKeys, params?: Record<string, number | string>): string => {
+    const baseText = translations[language][key] as string;
+    
+    if (params) {
+      return Object.entries(params).reduce(
+        (text, [paramKey, value]) => text.replace(`{${paramKey}}`, String(value)),
+        baseText
+      );
+    }
+    
+    return baseText;
   };
 
   return (

@@ -196,6 +196,9 @@ export const translations = {
     "approve-overtime-description": "メンバーの残業を承認",
     "holidays": "休日設定",
     "holidays-description": "休日カレンダーの設定",
+    "no-data-to-update": "更新対象のデータがありません",
+    "update-success": "正常に保存処理が完了しました",
+    "update-error": "更新処理でエラーが発生しました",
   },
   en: {
     // 既存の翻訳
@@ -394,5 +397,8 @@ export const translations = {
     "approve-overtime-description": "Approve member overtime requests",
     "holidays": "Holiday Settings",
     "holidays-description": "Configure holiday calendar",
+    "no-data-to-update": "No data to update",
+    "update-success": "Save process completed successfully",
+    "update-error": "An error occurred during the update process",
   }
 } as const;
