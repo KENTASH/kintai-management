@@ -28,7 +28,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
+      <Header toggleSideNav={() => setSidebarOpen(!isSidebarOpen)} />
       
       <div className="flex pt-16">
         <div className="fixed left-0 top-16 bottom-8 z-[150]">

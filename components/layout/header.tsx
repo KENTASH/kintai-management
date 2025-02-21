@@ -30,23 +30,6 @@ const SYSTEM_NAME = {
   en: "Attendance Management System"
 } as const;
 
-// テスト用の固定値
-const TEST_USER = {
-  employee_id: "EMP001",
-  last_name: "山田",
-  first_name: "太郎",
-  last_name_en: "Yamada",
-  first_name_en: "Taro",
-  branch_name: "HQ",
-  branch_name_jp: "本社",
-  branch_name_en: "Headquarters",
-  avatar_url: null,
-  roles: {
-    is_leader: true,
-    is_admin: false
-  }
-} as const;
-
 // アバターの選択肢
 const AVATAR_OPTIONS = [
   { id: 'avatar1', seed: 'Kenta' },
@@ -67,27 +50,40 @@ const AVATAR_OPTIONS = [
   { id: 'avatar16', seed: 'Lucy' },
 ] as const;
 
-export function Header() {
+interface HeaderProps {
+  toggleSideNav?: () => void;
+}
+
+export function Header({ toggleSideNav }: HeaderProps) {
   const { session } = useAuth()
   const { language } = useI18n()
   const { toast } = useToast()
   const router = useRouter()
-  const [userInfo, setUserInfo] = useState(TEST_USER)
+  const [userProfile, setUserInfo] = useState<any>(null)
   const [isAvatarDialogOpen, setIsAvatarDialogOpen] = useState(false)
   const [selectedAvatarSeed, setSelectedAvatarSeed] = useState('Kenta')
 
+  useEffect(() => {
+    const storedUserInfo = sessionStorage.getItem('userProfile')
+    if (storedUserInfo) {
+      setUserInfo(JSON.parse(storedUserInfo))
+    }
+  }, [])
+
   // 言語に応じた氏名の表示
   const getDisplayName = () => {
+    if (!userProfile) return ''
     if (language === 'en') {
-      return `${TEST_USER.first_name_en} ${TEST_USER.last_name_en}`.trim()
+      return `${userProfile.first_name_en} ${userProfile.last_name_en}`.trim()
     } else {
-      return `${TEST_USER.last_name} ${TEST_USER.first_name}`.trim()
+      return `${userProfile.last_name} ${userProfile.first_name}`.trim()
     }
   }
 
   // 言語に応じた支店名の表示
   const getBranchName = () => {
-    return language === 'en' ? TEST_USER.branch_name_en : TEST_USER.branch_name_jp
+    if (!userProfile) return ''
+    return language === 'en' ? userProfile.branch_name_en : userProfile.branch_name_jp
   }
 
   const getSystemName = () => {
@@ -156,7 +152,7 @@ export function Header() {
                     {getDisplayName()}
                   </div>
                   <div className="text-xs text-blue-100">
-                    {TEST_USER.employee_id} - {getBranchName()}
+                    {userProfile?.employee_id} - {getBranchName()}
                   </div>
                 </div>
 
@@ -168,7 +164,7 @@ export function Header() {
                         alt={getDisplayName()} 
                       />
                       <AvatarFallback>
-                        {TEST_USER.last_name[0]}
+                        {userProfile?.last_name[0]}
                       </AvatarFallback>
                     </Avatar>
                   </DropdownMenuTrigger>
@@ -177,7 +173,7 @@ export function Header() {
                       <span className="text-sm font-medium text-gray-900">名前</span>
                       <span className="text-sm text-gray-600">{getDisplayName()}</span>
                       <span className="text-sm font-medium text-gray-900 mt-2">社員番号</span>
-                      <span className="text-sm text-gray-600">{TEST_USER.employee_id}</span>
+                      <span className="text-sm text-gray-600">{userProfile?.employee_id}</span>
                       <span className="text-sm font-medium text-gray-900 mt-2">部署</span>
                       <span className="text-sm text-gray-600">{getBranchName()}</span>
                     </div>
