@@ -1,0 +1,53 @@
+{
+  "tables": {
+    "users": {
+      "columns": {
+        "id": "uuid",
+        "branch": "character varying"
+      },
+      "foreign_keys": {
+        "branch": {
+          "references": "branch_master",
+          "column": "code"
+        }
+      }
+    },
+    "user_roles": {
+      "columns": {
+        "user_id": "uuid",
+        "user_role_id": "character varying"
+      },
+      "foreign_keys": {
+        "user_id": {
+          "references": "users",
+          "column": "id"
+        }
+      }
+    },
+    "user_supervisors": {
+      "columns": {
+        "user_id": "uuid",
+        "supervisor_type": "USER-DEFINED",
+        "pic_user_id": "uuid"
+      },
+      "foreign_keys": {
+        "user_id": {
+          "references": "users",
+          "column": "id"
+        },
+        "pic_user_id": {
+          "references": "users",
+          "column": "id"
+        }
+      }
+    },
+    "branch_master": {
+      "columns": {
+        "code": "character varying",
+        "name_jp": "character varying",
+        "name_en": "character varying"
+      },
+      "foreign_keys": {}
+    }
+  }
+}

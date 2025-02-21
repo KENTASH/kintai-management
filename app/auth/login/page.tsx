@@ -41,19 +41,81 @@ export default function LoginPage() {
         throw signInError;
       }
 
-      const { data: sessionData, error: sessionError } = await supabase.auth.refreshSession();
+      console.log("✅ 認証成功、ユーザー情報を取得します");
 
+      // 1. まずユーザー情報を取得
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select(`
+          id,
+          employee_id,
+          last_name,
+          first_name,
+          last_name_en,
+          first_name_en,
+          email,
+          branch,
+          is_active,
+          user_roles (
+            user_role_id
+          )
+        `)
+        .eq('auth_id', authData.user?.id)
+        .single();
+
+      if (userError) {
+        console.error("❌ ユーザー情報の取得に失敗:", userError);
+        throw new Error("ユーザー情報の取得に失敗しました");
+      }
+
+      console.log("✅ ユーザー情報取得成功:", userData);
+
+      // 2. 支店情報を取得
+      const { data: branchData, error: branchError } = await supabase
+        .from('branch_master')
+        .select('code, name_jp, name_en')
+        .eq('code', userData.branch)
+        .single();
+
+      if (branchError) {
+        console.error("❌ 支店情報の取得に失敗:", branchError);
+        throw new Error("支店情報の取得に失敗しました");
+      }
+
+      console.log("✅ 支店情報取得成功:", branchData);
+
+      // 3. セッションの更新
+      const { data: sessionData, error: sessionError } = await supabase.auth.refreshSession();
       if (sessionError) {
         throw sessionError;
       }
-
-      console.log("✅ 認証後のセッション:", sessionData);
 
       if (!sessionData.session) {
         throw new Error("セッションの取得に失敗しました");
       }
 
-      // Cookie に `sb-access-token` を保存
+      // 4. ユーザープロファイルを作成
+      const userProfile = {
+        employee_id: userData.employee_id,
+        last_name: userData.last_name,
+        first_name: userData.first_name,
+        last_name_en: userData.last_name_en,
+        first_name_en: userData.first_name_en,
+        branch_name: branchData.code,
+        branch_name_jp: branchData.name_jp,
+        branch_name_en: branchData.name_en,
+        avatar_url: null,
+        roles: {
+          is_leader: userData.user_roles?.some(role => role.user_role_id === 'leader') || false,
+          is_admin: userData.user_roles?.some(role => role.user_role_id === 'admin') || false
+        }
+      };
+
+      // 5. セッションストレージに保存
+      sessionStorage.setItem('userProfile', JSON.stringify(userProfile));
+      console.log("✅ ユーザー情報をセッションストレージに保存:", userProfile);
+
+      // 6. Cookieにトークンを保存
       document.cookie = `sb-access-token=${sessionData.session.access_token}; path=/; max-age=3600; SameSite=Lax`;
 
       toast({
@@ -61,7 +123,10 @@ export default function LoginPage() {
         description: "ダッシュボードに移動します",
       });
 
-      router.push("/dashboard");
+      // 7. 少し待機してからリダイレクト
+      await new Promise(resolve => setTimeout(resolve, 500));
+      console.log("🚀 ダッシュボードへリダイレクト開始");
+      window.location.href = "/dashboard";
 
     } catch (error) {
       console.error("❌ Login error:", error);
@@ -79,9 +144,7 @@ export default function LoginPage() {
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.log("🔄 Auth state changed:", event, session);
-      if (event === "SIGNED_IN" && session) {
-        router.push("/dashboard");
-      }
+      // onAuthStateChangeでのリダイレクトは削除（handleSubmitで処理）
     });
 
     return () => {

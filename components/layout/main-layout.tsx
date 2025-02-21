@@ -2,9 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { MainNav } from './main-nav'
 import { SideNav } from './side-nav'
-import { UserNav } from './user-nav'
+import { Header } from './header'
 
 export function MainLayout({ children }: { children: React.ReactNode }) {
   const [loginDate, setLoginDate] = useState('')
@@ -29,12 +28,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="fixed top-0 left-0 right-0 z-[200] border-b bg-gradient-to-r from-blue-900 via-blue-600 to-blue-400 text-white">
-        <div className="flex h-16 items-center justify-between px-4">
-          <MainNav />
-          <UserNav />
-        </div>
-      </header>
+      <Header />
       
       <div className="flex pt-16">
         <div className="fixed left-0 top-16 bottom-8 z-[150]">

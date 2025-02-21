@@ -6,122 +6,246 @@ import { useI18n } from "@/lib/i18n/context"
 import { supabase } from "@/lib/supabaseClient"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { LogOut, Menu } from "lucide-react"
+import { Building2, Settings, X } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { useRouter } from "next/navigation"
-import type { Database } from "@/types/supabase"
+import Image from "next/image"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
-interface UserBranchInfo {
-  branch: string
-  branch_master: {
-    name_jp: string
-    name_en: string
+// システム名の定義
+const SYSTEM_NAME = {
+  ja: "勤怠管理システム",
+  en: "Attendance Management System"
+} as const;
+
+// テスト用の固定値
+const TEST_USER = {
+  employee_id: "EMP001",
+  last_name: "山田",
+  first_name: "太郎",
+  last_name_en: "Yamada",
+  first_name_en: "Taro",
+  branch_name: "HQ",
+  branch_name_jp: "本社",
+  branch_name_en: "Headquarters",
+  avatar_url: null,
+  roles: {
+    is_leader: true,
+    is_admin: false
   }
-}
+} as const;
 
-export function Header({ toggleSideNav }: { toggleSideNav: () => void }) {
+// アバターの選択肢
+const AVATAR_OPTIONS = [
+  { id: 'avatar1', seed: 'Kenta' },
+  { id: 'avatar2', seed: 'Jane' },
+  { id: 'avatar3', seed: 'Mike' },
+  { id: 'avatar4', seed: 'Lisa' },
+  { id: 'avatar5', seed: 'Tom' },
+  { id: 'avatar6', seed: 'Emma' },
+  { id: 'avatar7', seed: 'Alex' },
+  { id: 'avatar8', seed: 'Sarah' },
+  { id: 'avatar9', seed: 'David' },
+  { id: 'avatar10', seed: 'Maria' },
+  { id: 'avatar11', seed: 'James' },
+  { id: 'avatar12', seed: 'Emily' },
+  { id: 'avatar13', seed: 'Daniel' },
+  { id: 'avatar14', seed: 'Sophie' },
+  { id: 'avatar15', seed: 'Oliver' },
+  { id: 'avatar16', seed: 'Lucy' },
+] as const;
+
+export function Header() {
   const { session } = useAuth()
-  const { t, language } = useI18n()
+  const { language } = useI18n()
   const { toast } = useToast()
   const router = useRouter()
-  const [branchInfo, setBranchInfo] = useState<UserBranchInfo | null>(null)
+  const [userInfo, setUserInfo] = useState(TEST_USER)
+  const [isAvatarDialogOpen, setIsAvatarDialogOpen] = useState(false)
+  const [selectedAvatarSeed, setSelectedAvatarSeed] = useState('Kenta')
 
-  useEffect(() => {
-    const fetchBranchInfo = async () => {
-      if (session?.user?.id) {
-        const { data, error } = await supabase
-          .from('users')
-          .select(`
-            branch,
-            branch_master!users_branch_fkey (
-              name_jp,
-              name_en
-            )
-          `)
-          .eq('auth_id', session.user.id)
-          .single()
-
-        if (error) {
-          console.error('Error fetching branch info:', error)
-          return
-        }
-
-        if (data?.branch_master) {
-          setBranchInfo({
-            branch: data.branch,
-            branch_master: {
-              name_jp: data.branch_master[0]?.name_jp || '',
-              name_en: data.branch_master[0]?.name_en || ''
-            }
-          })
-        }
-      }
+  // 言語に応じた氏名の表示
+  const getDisplayName = () => {
+    if (language === 'en') {
+      return `${TEST_USER.first_name_en} ${TEST_USER.last_name_en}`.trim()
+    } else {
+      return `${TEST_USER.last_name} ${TEST_USER.first_name}`.trim()
     }
+  }
 
-    fetchBranchInfo()
-  }, [session?.user?.id])
+  // 言語に応じた支店名の表示
+  const getBranchName = () => {
+    return language === 'en' ? TEST_USER.branch_name_en : TEST_USER.branch_name_jp
+  }
+
+  const getSystemName = () => {
+    return language === 'en' ? SYSTEM_NAME.en : SYSTEM_NAME.ja
+  }
 
   const handleLogout = async () => {
     try {
       const { error } = await supabase.auth.signOut()
       if (error) throw error
-
-      toast({
-        title: "ログアウト成功",
-        description: "ログアウトしました",
+      localStorage.clear()
+      sessionStorage.clear()
+      document.cookie.split(";").forEach((c) => {
+        document.cookie = c
+          .replace(/^ +/, "")
+          .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/")
       })
-
       router.push("/auth/login")
+      router.refresh()
     } catch (error) {
       console.error('Logout error:', error)
       toast({
-        title: "エラー",
-        description: "ログアウトに失敗しました",
+        title: "ログアウトエラー",
+        description: "ログアウトに失敗しました。",
         variant: "destructive",
       })
     }
   }
 
-  const getBranchName = () => {
-    if (!branchInfo?.branch_master) return "不明"
-    return language === 'en' ? branchInfo.branch_master.name_en : branchInfo.branch_master.name_jp
+  const handleAvatarSelect = () => {
+    setIsAvatarDialogOpen(true)
+  }
+
+  const handleAvatarChange = async (seed: string) => {
+    setSelectedAvatarSeed(seed)
+    setIsAvatarDialogOpen(false)
+    toast({
+      title: "アバターを更新しました",
+      description: "新しいアバターが設定されました。",
+    })
   }
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-14 items-center">
-        <Button
-          variant="ghost"
-          className="mr-2 px-2 hover:bg-transparent hover:text-blue-600"
-          onClick={toggleSideNav}
-        >
-          <Menu className="h-5 w-5" />
-        </Button>
-        <div className="flex flex-1 items-center justify-between">
-          <nav className="flex items-center space-x-6">
-            {/* ここに必要なヘッダーナビゲーション項目を追加 */}
-          </nav>
-          <div className="flex items-center gap-4">
-            <div className="text-sm text-muted-foreground">
-              {getBranchName()}
+    <>
+      <header className="fixed top-0 left-0 right-0 z-[200] border-b bg-gradient-to-r from-blue-900 via-blue-600 to-blue-400 text-white">
+        <div className="flex h-16 items-center px-4">
+          <div className="flex flex-1 items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Building2 className="h-6 w-6 text-white" />
+              <span className="text-lg font-semibold">{getSystemName()}</span>
             </div>
-            <Avatar className="h-8 w-8 avatar-shake">
-              <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${session?.user?.email}`} />
-              <AvatarFallback>
-                {session?.user?.email?.charAt(0).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleLogout}
-              className="hover:bg-transparent hover:text-red-600"
-            >
-              <LogOut className="h-5 w-5" />
-            </Button>
+
+            <div className="flex items-center space-x-6">
+              <Image
+                alt="INTER Logo"
+                width="100"
+                height="32"
+                className="h-8 w-auto"
+                src="/inter-logo.png"
+                style={{ color: 'transparent' }}
+              />
+              
+              <div className="flex items-center space-x-4">
+                <div className="flex flex-col items-end">
+                  <div className="text-sm font-medium text-white">
+                    {getDisplayName()}
+                  </div>
+                  <div className="text-xs text-blue-100">
+                    {TEST_USER.employee_id} - {getBranchName()}
+                  </div>
+                </div>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Avatar className="relative flex shrink-0 overflow-hidden rounded-full h-8 w-8 bg-white avatar-shake cursor-pointer">
+                      <AvatarImage 
+                        src={`https://api.dicebear.com/7.x/personas/svg?seed=${selectedAvatarSeed}`}
+                        alt={getDisplayName()} 
+                      />
+                      <AvatarFallback>
+                        {TEST_USER.last_name[0]}
+                      </AvatarFallback>
+                    </Avatar>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-64 bg-white rounded-lg shadow-lg p-2 z-[300]" align="end" sideOffset={5}>
+                    <div className="flex flex-col p-2 bg-blue-50 rounded-md mb-2">
+                      <span className="text-sm font-medium text-gray-900">名前</span>
+                      <span className="text-sm text-gray-600">{getDisplayName()}</span>
+                      <span className="text-sm font-medium text-gray-900 mt-2">社員番号</span>
+                      <span className="text-sm text-gray-600">{TEST_USER.employee_id}</span>
+                      <span className="text-sm font-medium text-gray-900 mt-2">部署</span>
+                      <span className="text-sm text-gray-600">{getBranchName()}</span>
+                    </div>
+                    <DropdownMenuItem 
+                      onClick={handleAvatarSelect}
+                      className="flex items-center px-2 py-1.5 text-sm text-gray-700 hover:bg-blue-50 rounded-md"
+                    >
+                      <Settings className="mr-2 h-4 w-4" />
+                      アイコン設定
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator className="my-1" />
+                    <Button
+                      onClick={handleLogout}
+                      variant="ghost"
+                      className="w-full justify-start px-2 py-1.5 text-sm text-red-600 hover:bg-red-50 hover:text-red-700 rounded-md"
+                    >
+                      ログアウト
+                    </Button>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-    </header>
+      </header>
+
+      <Dialog open={isAvatarDialogOpen} onOpenChange={setIsAvatarDialogOpen}>
+        <DialogContent className="fixed left-[50%] top-[50%] grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg sm:max-w-[600px] z-[400]">
+          <div className="flex flex-col space-y-1.5 text-center sm:text-left">
+            <DialogTitle className="text-lg font-semibold leading-none tracking-tight">
+              アイコン設定
+            </DialogTitle>
+            <p className="text-sm text-muted-foreground">アイコンを選択</p>
+          </div>
+          <div className="grid grid-cols-4 gap-4 py-4">
+            {AVATAR_OPTIONS.map((avatar) => (
+              <button
+                key={avatar.id}
+                onClick={() => handleAvatarChange(avatar.seed)}
+                className={`
+                  inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium 
+                  ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 
+                  focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none 
+                  disabled:opacity-50 border border-input bg-background hover:text-accent-foreground 
+                  p-0 h-20 hover:bg-blue-50
+                  ${selectedAvatarSeed === avatar.seed ? 'ring-2 ring-blue-500' : ''}
+                `}
+              >
+                <span className="relative flex shrink-0 overflow-hidden rounded-full h-full w-full bg-white">
+                  <img
+                    className="aspect-square h-full w-full bg-white"
+                    alt={`Avatar ${avatar.id.split('avatar')[1]}`}
+                    src={`https://api.dicebear.com/7.x/personas/svg?seed=${avatar.seed}`}
+                  />
+                </span>
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsAvatarDialogOpen(false)}
+            className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground"
+          >
+            <X className="h-4 w-4" />
+            <span className="sr-only">Close</span>
+          </button>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 } 

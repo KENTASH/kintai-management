@@ -1,0 +1,74 @@
+{
+    "tables": {
+      "users": {
+        "description": "ユーザー情報を管理するテーブル",
+        "columns": {
+          "id": {"type": "uuid", "primary_key": true, "not_null": true},
+          "auth_id": {"type": "uuid", "not_null": true},
+          "employee_id": {"type": "varchar(20)", "not_null": true, "unique": true},
+          "email": {"type": "varchar(255)", "not_null": true, "unique": true},
+          "last_name": {"type": "varchar(50)", "not_null": true},
+          "first_name": {"type": "varchar(50)", "not_null": true},
+          "last_name_en": {"type": "varchar(50)", "not_null": false},
+          "first_name_en": {"type": "varchar(50)", "not_null": false},
+          "branch": {"type": "varchar(10)", "not_null": true},
+          "avatar_url": {"type": "text", "not_null": false},
+          "is_active": {"type": "boolean", "not_null": false, "default": true},
+          "theme": {"type": "USER-DEFINED", "not_null": true, "default": "Light"},
+          "language": {"type": "varchar(10)", "not_null": true, "default": "ja_JP"},
+          "created_at": {"type": "timestamp", "not_null": false, "default": "CURRENT_TIMESTAMP"},
+          "updated_at": {"type": "timestamp", "not_null": false, "default": "CURRENT_TIMESTAMP"},
+          "created_by": {"type": "uuid", "not_null": false},
+          "updated_by": {"type": "uuid", "not_null": false},
+          "registration_status": {"type": "USER-DEFINED", "not_null": true, "default": "01"}
+        },
+        "foreign_keys": {
+          "branch": {"references": "branch_master", "column": "code"}
+        }
+      },
+      "user_roles": {
+        "description": "ユーザーの権限を管理するテーブル",
+        "columns": {
+          "user_id": {"type": "uuid", "not_null": true},
+          "user_role_id": {"type": "varchar(50)", "not_null": true},
+          "created_at": {"type": "timestamp", "not_null": false, "default": "CURRENT_TIMESTAMP"},
+          "updated_at": {"type": "timestamp", "not_null": false, "default": "CURRENT_TIMESTAMP"},
+          "created_by": {"type": "uuid", "not_null": false},
+          "updated_by": {"type": "uuid", "not_null": false}
+        },
+        "foreign_keys": {
+          "user_id": {"references": "users", "column": "id"}
+        }
+      },
+      "user_supervisors": {
+        "description": "ユーザーの上司・管理者情報を管理するテーブル",
+        "columns": {
+          "user_id": {"type": "uuid", "not_null": true},
+          "supervisor_type": {"type": "USER-DEFINED", "not_null": true},
+          "pic_user_id": {"type": "uuid", "not_null": false},
+          "created_at": {"type": "timestamp", "not_null": false, "default": "CURRENT_TIMESTAMP"},
+          "updated_at": {"type": "timestamp", "not_null": false, "default": "CURRENT_TIMESTAMP"},
+          "created_by": {"type": "uuid", "not_null": false},
+          "updated_by": {"type": "uuid", "not_null": false}
+        },
+        "foreign_keys": {
+          "user_id": {"references": "users", "column": "id"},
+          "pic_user_id": {"references": "users", "column": "id"}
+        }
+      },
+      "branch_master": {
+        "description": "支店・部門情報を管理するテーブル",
+        "columns": {
+          "code": {"type": "varchar(10)", "not_null": true, "primary_key": true},
+          "name_jp": {"type": "varchar(100)", "not_null": true},
+          "name_en": {"type": "varchar(100)", "not_null": true},
+          "created_at": {"type": "timestamp", "not_null": false, "default": "CURRENT_TIMESTAMP"},
+          "updated_at": {"type": "timestamp", "not_null": false, "default": "CURRENT_TIMESTAMP"},
+          "created_by": {"type": "uuid", "not_null": false},
+          "updated_by": {"type": "uuid", "not_null": false}
+        },
+        "foreign_keys": {}
+      }
+    }
+  }
+  

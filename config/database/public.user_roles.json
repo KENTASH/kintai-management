@@ -1,0 +1,38 @@
+[
+  {
+    "column_name": "user_id",
+    "data_type": "uuid",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "column_name": "user_role_id",
+    "data_type": "character varying",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "YES",
+    "column_default": "CURRENT_TIMESTAMP"
+  },
+  {
+    "column_name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "YES",
+    "column_default": "CURRENT_TIMESTAMP"
+  },
+  {
+    "column_name": "created_by",
+    "data_type": "uuid",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "updated_by",
+    "data_type": "uuid",
+    "is_nullable": "YES",
+    "column_default": null
+  }
+]

@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { supabase } from '@/lib/supabaseClient'
 import { useI18n } from "@/lib/i18n/context"
 import { LogOut, Settings } from "lucide-react"
 import Image from "next/image"
 import { useToast } from "@/components/ui/use-toast"
+import { supabase } from "@/lib/supabaseClient"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -46,96 +46,56 @@ const avatarSamples = [
   { id: 16, url: "https://api.dicebear.com/7.x/personas/svg?seed=Lucy" }
 ]
 
-interface UserData {
-  id: string
-  auth_id: string
+interface StoredUserProfile {
   employee_id: string
-  branch: string
-  branch_name: string
   last_name: string
   first_name: string
   last_name_en: string | null
   first_name_en: string | null
+  branch_name: string
+  branch_name_jp: string
+  branch_name_en: string
   avatar_url: string | null
-  language: string | null
 }
 
 export function UserNav() {
-  const { t } = useI18n()
-  const { session, loading } = useAuth()
+  const { session, userProfile, setUserProfile } = useAuth()
+  const { t, language } = useI18n()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [selectedAvatar, setSelectedAvatar] = useState(avatarSamples[0].url)
   const router = useRouter()
   const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(false)
-  const [userData, setUserData] = useState<UserData | null>(null)
 
   useEffect(() => {
-    const fetchUserData = async () => {
-      try {
-        // セッションの取得
-        const { data: { session } } = await supabase.auth.getSession()
-        if (!session) return
-
-        // ユーザー情報の取得
-        const { data, error } = await supabase
-          .from('users')
-          .select(`
-            id,
-            auth_id,
-            employee_id,
-            last_name,
-            first_name,
-            last_name_en,
-            first_name_en,
-            branch,
-            avatar_url,
-            language,
-            branch_master:branch_master!users_branch_fkey (
-              name_jp,
-              name_en
-            )
-          `)
-          .eq('auth_id', session.user.id)
-          .single()
-
-        if (error) throw error
-
-        if (data) {
-          setUserData({
-            ...data,
-            branch_name: data.language === 'en_US'
-              ? data.branch_master[0]?.name_en ?? "Unknown"
-              : data.branch_master[0]?.name_jp ?? "不明",
-          })
+    const checkProfile = () => {
+      const storedProfile = sessionStorage.getItem('userProfile')
+      if (storedProfile) {
+        const parsedProfile = JSON.parse(storedProfile)
+        if (setUserProfile) {
+          setUserProfile(parsedProfile)
         }
-      } catch (error) {
-        console.error('Error fetching user data:', error)
       }
     }
 
-    fetchUserData()
-
-    // 認証状態の変更を監視
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) {
-        fetchUserData()
-      } else {
-        setUserData(null)
-      }
-    })
+    checkProfile()
+    window.addEventListener('storage', checkProfile)
 
     return () => {
-      subscription.unsubscribe()
+      window.removeEventListener('storage', checkProfile)
     }
-  }, [])
+  }, [setUserProfile])
 
-  // getFullName関数を修正
   const getFullName = () => {
-    if (!userData) return ''
-    return userData.language === 'en_US'
-      ? `${userData.first_name_en} ${userData.last_name_en}`
-      : `${userData.last_name} ${userData.first_name}`
+    if (!userProfile) return ''
+    return language === 'en'
+      ? `${userProfile.first_name_en || ''} ${userProfile.last_name_en || ''}`
+      : `${userProfile.last_name} ${userProfile.first_name}`
+  }
+
+  const getBranchName = () => {
+    if (!userProfile) return "不明"
+    return language === 'en' ? userProfile.branch_name_en : userProfile.branch_name_jp
   }
 
   const handleLogout = async () => {
@@ -191,11 +151,11 @@ export function UserNav() {
             priority
           />
         </div>
-        {userData && (
+        {userProfile && (
           <div className="hidden md:block text-right">
             <p className="text-sm font-medium">{getFullName()}</p>
-            <p className="text-xs">{userData.employee_id}</p>
-            <p className="text-xs">{userData.branch_name}</p>
+            <p className="text-xs">{userProfile.employee_id}</p>
+            <p className="text-xs">{getBranchName()}</p>
           </div>
         )}
         <DropdownMenu>
@@ -205,15 +165,19 @@ export function UserNav() {
               className="relative h-8 w-8 rounded-full hover:bg-white/10"
             >
               <Avatar className="h-8 w-8 bg-white avatar-shake">
-                <AvatarImage src={selectedAvatar} alt={getFullName()} className="bg-white" />
+                <AvatarImage 
+                  src={userProfile?.avatar_url || selectedAvatar} 
+                  alt={getFullName()} 
+                  className="bg-white" 
+                />
                 <AvatarFallback className="bg-white text-gray-900">
-                  {userData?.last_name?.[0] || "U"}
+                  {userProfile?.last_name?.[0] || "U"}
                 </AvatarFallback>
               </Avatar>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-64 z-[300]" align="end">
-            {userData && (
+            {userProfile && (
               <DropdownMenuLabel>
                 <div className="space-y-2">
                   <div className="flex justify-between">
@@ -222,11 +186,11 @@ export function UserNav() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm text-muted-foreground">{t("employee-id-label")}</span>
-                    <span className="text-sm font-medium">{userData.employee_id}</span>
+                    <span className="text-sm font-medium">{userProfile.employee_id}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm text-muted-foreground">{t("branch-label")}</span>
-                    <span className="text-sm font-medium">{userData.branch_name}</span>
+                    <span className="text-sm font-medium">{getBranchName()}</span>
                   </div>
                 </div>
               </DropdownMenuLabel>

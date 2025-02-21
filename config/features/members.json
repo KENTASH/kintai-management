@@ -1,0 +1,74 @@
+{
+    "members": {
+      "save_conditions": {
+        "required_system_fields": ["employee_id"],
+        "required_business_fields": [
+          "branch",
+          "last_name",
+          "first_name",
+          "last_name_en",
+          "first_name_en",
+          "email"
+        ],
+        "optional_fields": ["leader", "subleader", "leader_role", "admin_role"]
+      },
+      "tables": {
+        "users": {
+          "insert": {
+            "employee_id": "public.users.employee_id",
+            "branch": "public.users.branch",
+            "last_name": "public.users.last_name",
+            "first_name": "public.users.first_name",
+            "last_name_en": "public.users.last_name_en",
+            "first_name_en": "public.users.first_name_en",
+            "email": "public.users.email",
+            "registration_status": {"default": "01"}
+          },
+          "update": {
+            "branch": "public.users.branch",
+            "last_name": "public.users.last_name",
+            "first_name": "public.users.first_name",
+            "last_name_en": "public.users.last_name_en",
+            "first_name_en": "public.users.first_name_en",
+            "email": "public.users.email"
+          },
+          "key_field": "employee_id"
+        }
+      },
+      "search_conditions": [
+        {
+          "screen_field": "所属",
+          "db_table": "public.users",
+          "db_column": "branch",
+          "condition": "=",
+          "input_type": "select",
+          "special_handling": "選択が「全て」の場合は条件を適用しない"
+        },
+        {
+          "screen_field": "社員番号",
+          "db_table": "public.users",
+          "db_column": "employee_id",
+          "condition": "LIKE",
+          "input_type": "text"
+        }
+      ],
+      "initialization": {
+        "fetch_branch_master": {"table": "public.branch_master", "columns": ["code", "name_jp", "name_en"]},
+        "set_select_options": {
+          "target": "所属セレクトボックス",
+          "default_option": {"value": "", "label_ja": "全て", "label_en": "All"},
+          "options": {
+            "data_source": "public.branch_master",
+            "value_column": "code",
+            "label_column": {"ja_JP": "name_jp", "en_US": "name_en"}
+          }
+        }
+      },
+      "messages": {
+        "success": "処理が完了しました。",
+        "validation_error": "入力内容に不備があります。",
+        "unexpected_error": "想定外のエラーが発生しました。"
+      }
+    }
+  }
+  
