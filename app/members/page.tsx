@@ -352,7 +352,7 @@ export default function MembersPage() {
   }
 
   // 検索処理の実装
-  const handleSearch = async () => {
+  const handleSearch = async (showMessage: boolean = true) => {
     setIsLoading(true)
     const supabase = newClient()
 
@@ -456,9 +456,9 @@ export default function MembersPage() {
 
       setMembers(formattedUsers || [])
       setOriginalMembers(formattedUsers || [])
-      
+
       // 検索時のメッセージ表示を条件付きに変更
-      if (!hasSearched) {
+      if (showMessage && !hasSearched) {
         if (formattedUsers.length === 0) {
           setMessage({
             type: 'info',
@@ -475,12 +475,14 @@ export default function MembersPage() {
 
     } catch (error) {
       console.error('Error searching members:', error)
-      setMessage({
-        type: 'error',
-        text: 'メンバー情報の検索に失敗しました',
-        dismissible: true,
-        persistent: true
-      })
+      if (showMessage) {
+        setMessage({
+          type: 'error',
+          text: 'メンバー情報の検索に失敗しました',
+          dismissible: true,
+          persistent: true
+        })
+      }
     } finally {
       setIsLoading(false)
     }
@@ -653,21 +655,21 @@ export default function MembersPage() {
   // バリデーション関数の修正
   const validateMember = (member: MemberFormData): ValidationError[] => {
     const errors: ValidationError[] = [];
-
-    // システム必須項目のチェック
+        
+        // システム必須項目のチェック
     if (!member.employee_id || typeof member.employee_id !== 'string' || !member.employee_id.trim()) {
       errors.push({ field: 'employee_id', message: '社員番号は必須です' });
-    }
-
-    // 業務必須項目のチェック
+        }
+        
+        // 業務必須項目のチェック
     const requiredFields: { field: keyof MemberFormData; label: string }[] = [
-      { field: 'branch', label: '部署' },
-      { field: 'last_name', label: '姓' },
-      { field: 'first_name', label: '名' },
-      { field: 'email', label: 'メールアドレス' }
-    ];
+          { field: 'branch', label: '部署' },
+          { field: 'last_name', label: '姓' },
+          { field: 'first_name', label: '名' },
+          { field: 'email', label: 'メールアドレス' }
+        ];
 
-    requiredFields.forEach(({ field, label }) => {
+        requiredFields.forEach(({ field, label }) => {
       const value = member[field];
       if (!value || typeof value !== 'string' || !value.trim()) {
         errors.push({ field, message: `${label}は必須です` });
@@ -922,7 +924,7 @@ export default function MembersPage() {
       // 5. 画面の更新
       setEditingMembers([])
       setHasSearched(false)
-      await handleSearch()
+      await handleSearch(false)  // メッセージ表示を無効化
 
     } catch (error) {
       console.error('Error in save process:', error)
@@ -1043,10 +1045,10 @@ export default function MembersPage() {
         <div className="flex items-center gap-2">
           <div 
             onClick={() => openLeaderDialog(member.id, field)}
-            className="flex-1 h-9 px-3 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground cursor-pointer flex items-center text-sm"
+            className="flex-1 h-9 px-3 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground cursor-pointer flex items-center text-sm whitespace-nowrap overflow-hidden"
           >
             {supervisorInfo ? (
-              <span>{supervisorInfo.name}</span>
+              <span className="truncate">{supervisorInfo.name}</span>
             ) : (
               <span className="text-blue-600 hover:underline">選択してください</span>
             )}
@@ -1162,12 +1164,12 @@ export default function MembersPage() {
                   {icons[message.type]}
                   <span className="text-sm font-medium whitespace-pre-line">{message.text}</span>
                 </div>
-                <button
-                  onClick={() => setMessage(null)}
-                  className="p-1 hover:bg-gray-100 rounded-full"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+                  <button
+                    onClick={() => setMessage(null)}
+                    className="p-1 hover:bg-gray-100 rounded-full"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
               </motion.div>
             )}
           </AnimatePresence>
@@ -1464,10 +1466,10 @@ export default function MembersPage() {
               </div>
               <div className="flex gap-2 w-full sm:w-auto mt-4 sm:mt-0">
                 <Button
-                  onClick={handleSearch}
+                  onClick={(e) => handleSearch(true)}
                   className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 text-white"
                 >
-                  <Search className="h-4 w-4 mr-2" />
+                <Search className="h-4 w-4 mr-2" />
                   検索
                 </Button>
                 <Button
@@ -1477,22 +1479,22 @@ export default function MembersPage() {
                 >
                   <X className="h-4 w-4 mr-2" />
                   クリア
-                </Button>
+              </Button>
               </div>
             </div>
 
             <div>
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
-                <h3 className="text-lg font-medium">{t("member-list")}</h3>
+                  <h3 className="text-lg font-medium">{t("member-list")}</h3>
                 <div className="flex gap-2 w-full sm:w-auto">
                   <Button onClick={handleAddRow} variant="outline" className="flex-1 sm:flex-none">
-                    <Plus className="h-4 w-4 mr-2" />
-                    {t("add-row")}
-                  </Button>
+                      <Plus className="h-4 w-4 mr-2" />
+                      {t("add-row")}
+                    </Button>
                   <Button onClick={handleSave} className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700">
-                    <Save className="h-4 w-4 mr-2" />
-                    {t("save")}
-                  </Button>
+                      <Save className="h-4 w-4 mr-2" />
+                      {t("save")}
+                    </Button>
                 </div>
               </div>
 
@@ -1658,21 +1660,21 @@ export default function MembersPage() {
                     filteredMembers.map((member) => {
                       const branchName = branches.find(b => b.code === member.branch)
                       return (
-                        <TableRow key={member.id} className="hover:bg-blue-50">
-                          <TableCell className="py-1">{member.employee_id}</TableCell>
-                          <TableCell className="py-1">{member.last_name} {member.first_name}</TableCell>
+                      <TableRow key={member.id} className="hover:bg-blue-50">
+                        <TableCell className="py-1">{member.employee_id}</TableCell>
+                        <TableCell className="py-1">{member.last_name} {member.first_name}</TableCell>
                           <TableCell className="py-1">
                             {branchName ? (language === 'ja' ? branchName.name_jp : branchName.name_en) : ''}
                           </TableCell>
-                          <TableCell className="py-1">
-                            <Button
-                              onClick={() => handleLeaderSelect(member)}
-                              className="h-7 w-full bg-blue-600 hover:bg-blue-700 text-white"
-                            >
-                              {t("select")}
-                            </Button>
-                          </TableCell>
-                        </TableRow>
+                        <TableCell className="py-1">
+                          <Button
+                            onClick={() => handleLeaderSelect(member)}
+                            className="h-7 w-full bg-blue-600 hover:bg-blue-700 text-white"
+                          >
+                            {t("select")}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
                       )
                     })
                   ) : (
