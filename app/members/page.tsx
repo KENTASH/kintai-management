@@ -282,11 +282,19 @@ export default function MembersPage() {
 
   // メッセージの自動消去
   useEffect(() => {
+    let timer: NodeJS.Timeout | null = null;
+    
     if (message && (message.type === 'success' || message.type === 'info')) {
-      const timer = setTimeout(() => {
+      // 新しいタイマーをセットする前に既存のタイマーをクリア
+      if (timer) clearTimeout(timer);
+      
+      timer = setTimeout(() => {
         setMessage(null)
       }, 3000)
-      return () => clearTimeout(timer)
+    }
+    
+    return () => {
+      if (timer) clearTimeout(timer)
     }
   }, [message])
 
@@ -914,17 +922,17 @@ export default function MembersPage() {
         }
       }
 
-      // 4. 成功メッセージの表示
+      // 4. 画面の更新（メッセージ表示前に実行）
+      setEditingMembers([])
+      setHasSearched(false)
+      await handleSearch(false)  // メッセージ表示を無効化
+
+      // 5. 成功メッセージの表示（最後に実行）
       setMessage({
         type: 'success',
         text: t('update-success'),
         persistent: false
       })
-
-      // 5. 画面の更新
-      setEditingMembers([])
-      setHasSearched(false)
-      await handleSearch(false)  // メッセージ表示を無効化
 
     } catch (error) {
       console.error('Error in save process:', error)
