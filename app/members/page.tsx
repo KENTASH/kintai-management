@@ -1030,20 +1030,30 @@ export default function MembersPage() {
       const supervisorInfo = member.supervisor_info[field]
       return (
         <div className="flex items-center gap-2">
-          <Input
-            value={supervisorInfo ? supervisorInfo.name : ''}
-            readOnly
-            className="h-9 flex-1"
-            placeholder={`${field === 'leader' ? '担当リーダー' : '担当サブリーダー'}を選択...`}
-          />
-          <Button
-            variant="outline"
-            size="icon"
+          <div 
             onClick={() => openLeaderDialog(member.id, field)}
-            className="h-9 w-9 hover:bg-blue-50"
+            className="flex-1 h-9 px-3 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground cursor-pointer flex items-center text-sm"
           >
-            <UserPlus className="h-4 w-4 text-blue-600" />
-          </Button>
+            {supervisorInfo ? (
+              <span>{supervisorInfo.name}</span>
+            ) : (
+              <span className="text-blue-600 hover:underline">選択してください</span>
+            )}
+          </div>
+          {supervisorInfo && (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={(e) => {
+                e.stopPropagation()
+                handleClearSupervisor(member.id, field)
+              }}
+              className="h-9 w-9 hover:bg-red-50 flex-shrink-0"
+            >
+              <X className="h-4 w-4 text-red-600" />
+            </Button>
+          )}
         </div>
       )
     }
@@ -1354,6 +1364,35 @@ export default function MembersPage() {
         variant: "destructive",
       })
     }
+  }
+
+  // スーパーバイザー情報をクリアする関数
+  const handleClearSupervisor = (memberId: string, field: 'leader' | 'subleader') => {
+    setMembers(members.map(member => {
+      if (member.id === memberId) {
+        return {
+          ...member,
+          supervisor_info: {
+            ...member.supervisor_info,
+            [field]: null
+          }
+        }
+      }
+      return member
+    }))
+    
+    setEditingMembers(editingMembers.map(member => {
+      if (member.id === memberId) {
+        return {
+          ...member,
+          supervisor_info: {
+            ...member.supervisor_info,
+            [field]: null
+          }
+        }
+      }
+      return member
+    }))
   }
 
   return (
