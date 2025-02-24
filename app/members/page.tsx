@@ -152,6 +152,19 @@ type UserWithBranch = RawUser & {
     name_jp: string;
     name_en: string;
   } | null>;
+  user_supervisors?: Array<{
+    supervisor_type: string;
+    pic_user_id: string;
+    pic_user: {
+      id: string;
+      employee_id: string;
+      last_name: string;
+      first_name: string;
+    } | null;
+  }>;
+  user_roles?: Array<{
+    user_role_id: string;
+  }>;
 }
 
 // Member型を修正
@@ -168,15 +181,23 @@ type Member = {
   registration_status: string;
   is_active: boolean;
   supervisor_info: {
-    leader: null | string;
-    subleader: null | string;
-    supervisor_type?: string;  // supervisor_typeを追加
+    leader: null | {
+      id: string;
+      employee_id: string;
+      name: string;
+    };
+    subleader: null | {
+      id: string;
+      employee_id: string;
+      name: string;
+    };
+    supervisor_type?: string;
   };
   roles: {
     is_leader: boolean;
     is_admin: boolean;
   };
-  [key: string]: any;  // インデックスシグネチャを追加
+  [key: string]: any;
 }
 
 // フィールド型を定義
@@ -227,7 +248,7 @@ export default function MembersPage() {
 
   const emptyMember: Member = {
     id: '',
-    employee_id: '',  // 空文字列で初期化
+    employee_id: '',
     email: '',
     last_name: '',
     first_name: '',
@@ -235,7 +256,7 @@ export default function MembersPage() {
     first_name_en: null,
     branch: '',
     branch_name: '',
-    registration_status: '01',
+    registration_status: '00',  // 初期値を '00' (未登録) に変更
     is_active: true,
     supervisor_info: {
       leader: null,
@@ -352,6 +373,19 @@ export default function MembersPage() {
           branch_master!inner (
             name_jp,
             name_en
+          ),
+          user_supervisors!user_supervisors_user_id_fkey (
+            supervisor_type,
+            pic_user_id,
+            pic_user:users!user_supervisors_pic_user_id_fkey (
+              id,
+              employee_id,
+              last_name,
+              first_name
+            )
+          ),
+          user_roles!left (
+            user_role_id
           )
         `)
         .eq('is_active', true)
@@ -368,30 +402,57 @@ export default function MembersPage() {
 
       const { data: users, error: usersError } = await query
 
-      if (usersError) throw usersError
+      if (usersError) {
+        console.error('Error searching members:', usersError)
+        setMessage({
+          type: 'error',
+          text: 'メンバー情報の検索に失敗しました',
+          dismissible: true,
+          persistent: true
+        })
+        return
+      }
 
-      const formattedUsers = (users as UserWithBranch[])?.map(user => ({
-        id: user.id,
-        employee_id: user.employee_id,
-        email: user.email,
-        last_name: user.last_name,
-        first_name: user.first_name,
-        last_name_en: user.last_name_en,
-        first_name_en: user.first_name_en,
-        branch: user.branch,
-        branch_name: user.branch_master?.[0]?.name_jp || '',
-        registration_status: user.registration_status || '01',
-        is_active: user.is_active,
-        supervisor_info: {
-          leader: null,
-          subleader: null,
-          supervisor_type: '01'  // デフォルト値を設定
-        },
-        roles: {
-          is_leader: false,
-          is_admin: false
+      const formattedUsers = ((users as unknown) as UserWithBranch[])?.map(user => {
+        // スーパーバイザー情報の整理
+        const leader = user.user_supervisors?.find(s => s.supervisor_type === 'leader')?.pic_user
+        const subleader = user.user_supervisors?.find(s => s.supervisor_type === 'subleader')?.pic_user
+
+        // ロール情報の整理
+        const roles = user.user_roles || []
+        const is_leader = roles.some(r => r.user_role_id === 'leader')
+        const is_admin = roles.some(r => r.user_role_id === 'admin')
+
+        return {
+          id: user.id,
+          employee_id: user.employee_id,
+          email: user.email,
+          last_name: user.last_name,
+          first_name: user.first_name,
+          last_name_en: user.last_name_en,
+          first_name_en: user.first_name_en,
+          branch: user.branch,
+          branch_name: user.branch_master?.[0]?.name_jp || '',
+          registration_status: user.registration_status || '01',
+          is_active: user.is_active,
+          supervisor_info: {
+            leader: leader ? {
+              id: leader.id,
+              employee_id: leader.employee_id,
+              name: `${leader.last_name} ${leader.first_name}`
+            } : null,
+            subleader: subleader ? {
+              id: subleader.id,
+              employee_id: subleader.employee_id,
+              name: `${subleader.last_name} ${subleader.first_name}`
+            } : null
+          },
+          roles: {
+            is_leader,
+            is_admin
+          }
         }
-      })) as Member[]
+      }) as Member[]
 
       setMembers(formattedUsers || [])
       setOriginalMembers(formattedUsers || [])
@@ -416,7 +477,9 @@ export default function MembersPage() {
       console.error('Error searching members:', error)
       setMessage({
         type: 'error',
-        text: 'メンバー情報の検索に失敗しました'
+        text: 'メンバー情報の検索に失敗しました',
+        dismissible: true,
+        persistent: true
       })
     } finally {
       setIsLoading(false)
@@ -709,32 +772,40 @@ export default function MembersPage() {
             .delete()
             .eq('user_id', member.id);
 
-          if (member.supervisor_info.leader || member.supervisor_info.subleader) {
-            const supervisorsToInsert = [];
-            if (member.supervisor_info.leader) {
-              supervisorsToInsert.push({
-                user_id: member.id,
-                pic_user_id: member.supervisor_info.leader,
-                supervisor_type: '01'
-              });
-            }
-            if (member.supervisor_info.subleader) {
-              supervisorsToInsert.push({
-                user_id: member.id,
-                pic_user_id: member.supervisor_info.subleader,
-                supervisor_type: '02'
-              });
-            }
+          const supervisorsToInsert = []
+          
+          if (member.supervisor_info.leader) {
+            supervisorsToInsert.push({
+              user_id: member.id,
+              pic_user_id: member.supervisor_info.leader.id,
+              supervisor_type: 'leader',
+              created_by: (await supabase.auth.getUser()).data.user?.id,
+              updated_by: (await supabase.auth.getUser()).data.user?.id
+            })
+          }
+          
+          if (member.supervisor_info.subleader) {
+            supervisorsToInsert.push({
+              user_id: member.id,
+              pic_user_id: member.supervisor_info.subleader.id,
+              supervisor_type: 'subleader',
+              created_by: (await supabase.auth.getUser()).data.user?.id,
+              updated_by: (await supabase.auth.getUser()).data.user?.id
+            })
+          }
 
+          if (supervisorsToInsert.length > 0) {
             const { error: supervisorsError } = await supabase
               .from('user_supervisors')
-              .insert(supervisorsToInsert);
+              .insert(supervisorsToInsert)
             
-            if (supervisorsError) throw supervisorsError;
+            if (supervisorsError) throw supervisorsError
           }
         } catch (error: unknown) {
-          const errorMessage = error instanceof Error ? error.message : '不明なエラーが発生しました';
-          throw new Error(`既存メンバー(${member.employee_id})の更新に失敗しました: ${errorMessage}`);
+          if (error instanceof Error) {
+            throw new Error(`既存メンバー(${member.employee_id})の更新に失敗しました: ${error.message}`)
+          }
+          throw error
         }
       }
 
@@ -744,6 +815,9 @@ export default function MembersPage() {
           validateData(member);
 
           // 4-1. ユーザー基本情報の追加
+          const { data: userData } = await supabase.auth.getUser();
+          const currentUserId = userData.user?.id;
+
           const { data: newUser, error: insertError } = await supabase
             .from('users')
             .insert({
@@ -757,7 +831,9 @@ export default function MembersPage() {
               registration_status: '01',
               is_active: true,
               created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
+              updated_at: new Date().toISOString(),
+              created_by: currentUserId,
+              updated_by: currentUserId
             })
             .select()
             .single();
@@ -770,13 +846,17 @@ export default function MembersPage() {
             if (member.roles.is_leader) {
               rolesToInsert.push({
                 user_id: newUser.id,
-                user_role_id: 'leader'
+                user_role_id: 'leader',
+                created_by: currentUserId,
+                updated_by: currentUserId
               });
             }
             if (member.roles.is_admin) {
               rolesToInsert.push({
                 user_id: newUser.id,
-                user_role_id: 'admin'
+                user_role_id: 'admin',
+                created_by: currentUserId,
+                updated_by: currentUserId
               });
             }
 
@@ -789,31 +869,39 @@ export default function MembersPage() {
 
           // 4-3. 上司情報の追加
           if (member.supervisor_info.leader || member.supervisor_info.subleader) {
-            const supervisorsToInsert = [];
+            const supervisorsToInsert = []
+            
             if (member.supervisor_info.leader) {
               supervisorsToInsert.push({
                 user_id: newUser.id,
-                pic_user_id: member.supervisor_info.leader,
-                supervisor_type: '01'
-              });
+                pic_user_id: member.supervisor_info.leader.id,
+                supervisor_type: 'leader',
+                created_by: currentUserId,
+                updated_by: currentUserId
+              })
             }
+            
             if (member.supervisor_info.subleader) {
               supervisorsToInsert.push({
                 user_id: newUser.id,
-                pic_user_id: member.supervisor_info.subleader,
-                supervisor_type: '02'
-              });
+                pic_user_id: member.supervisor_info.subleader.id,
+                supervisor_type: 'subleader',
+                created_by: currentUserId,
+                updated_by: currentUserId
+              })
             }
 
             const { error: supervisorsError } = await supabase
               .from('user_supervisors')
-              .insert(supervisorsToInsert);
+              .insert(supervisorsToInsert)
             
-            if (supervisorsError) throw supervisorsError;
+            if (supervisorsError) throw supervisorsError
           }
         } catch (error: unknown) {
-          const errorMessage = error instanceof Error ? error.message : '不明なエラーが発生しました';
-          throw new Error(`新規メンバー(${member.employee_id})の追加に失敗しました: ${errorMessage}`);
+          if (error instanceof Error) {
+            throw new Error(`新規メンバー(${member.employee_id})の追加に失敗しました: ${error.message}`)
+          }
+          throw error
         }
       }
 
@@ -829,41 +917,59 @@ export default function MembersPage() {
       await handleSearch();
 
     } catch (error: unknown) {
-      console.error('Error in save process:', error);
-      const errorMessage = error instanceof Error ? error.message : t('update-error');
+      console.error('Error in save process:', error)
       setMessage({
         type: 'error',
-        text: errorMessage,
+        text: error instanceof Error ? error.message : t('update-error'),
         dismissible: true,
         persistent: true
-      });
+      })
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
   };
 
   const handleLeaderSelect = (selectedMember: Member) => {
     if (currentEditingMember) {
       const { memberId, field } = currentEditingMember
-      const fullName = `${selectedMember.last_name} ${selectedMember.first_name}`
       
       setMembers(members.map(member => {
         if (member.id === memberId) {
-          return { ...member, [field]: fullName }
+          return {
+            ...member,
+            supervisor_info: {
+              ...member.supervisor_info,
+              [field]: {
+                id: selectedMember.id,
+                employee_id: selectedMember.employee_id,
+                name: `${selectedMember.last_name} ${selectedMember.first_name}`
+              }
+            }
+          }
         }
         return member
       }))
       
       setEditingMembers(editingMembers.map(member => {
         if (member.id === memberId) {
-          return { ...member, [field]: fullName }
+          return {
+            ...member,
+            supervisor_info: {
+              ...member.supervisor_info,
+              [field]: {
+                id: selectedMember.id,
+                employee_id: selectedMember.employee_id,
+                name: `${selectedMember.last_name} ${selectedMember.first_name}`
+              }
+            }
+          }
         }
         return member
       }))
     }
     
     setLeaderDialogOpen(false)
-    setLeaderSearchCriteria({ employeeId: "", name: "", department: "all" })
+    setLeaderSearchCriteria({ employeeId: "", name: "", department: "" })
     setCurrentEditingMember(null)
   }
 
@@ -884,7 +990,7 @@ export default function MembersPage() {
         <Input
           value={member.employee_id || ''}
           onChange={(e) => handleInputChange(member.id, 'employee_id', e.target.value)}
-          className="w-full"
+          className="w-full h-9"
         />
       )
     }
@@ -921,10 +1027,11 @@ export default function MembersPage() {
     }
 
     if (field === 'leader' || field === 'subleader') {
+      const supervisorInfo = member.supervisor_info[field]
       return (
         <div className="flex items-center gap-2">
           <Input
-            value={member[field] || ''}
+            value={supervisorInfo ? supervisorInfo.name : ''}
             readOnly
             className="h-9 flex-1"
             placeholder={`${field === 'leader' ? '担当リーダー' : '担当サブリーダー'}を選択...`}
@@ -932,7 +1039,7 @@ export default function MembersPage() {
           <Button
             variant="outline"
             size="icon"
-            onClick={() => openLeaderDialog(member.id, field === 'leader' ? 'leader' : 'subleader')}
+            onClick={() => openLeaderDialog(member.id, field)}
             className="h-9 w-9 hover:bg-blue-50"
           >
             <UserPlus className="h-4 w-4 text-blue-600" />
@@ -1034,14 +1141,12 @@ export default function MembersPage() {
                   {icons[message.type]}
                   <span className="text-sm font-medium whitespace-pre-line">{message.text}</span>
                 </div>
-                {message.dismissible && (
-                  <button
-                    onClick={() => setMessage(null)}
-                    className="p-1 hover:bg-gray-100 rounded-full"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                )}
+                <button
+                  onClick={() => setMessage(null)}
+                  className="p-1 hover:bg-gray-100 rounded-full"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </motion.div>
             )}
           </AnimatePresence>
@@ -1096,10 +1201,11 @@ export default function MembersPage() {
   // ステータス表示の変換関数を修正
   const getStatusText = (status: string): string => {
     const statusMap: { [key: string]: string } = {
-      '01': '仮登録',
+      '00': '未登録',
+      '01': '仮登録済み',
       '02': '招待済み',
       '03': '認証済み',
-      '99': '無効化'
+      '99': '廃止済み'
     }
     return statusMap[status] || status
   }
@@ -1267,16 +1373,16 @@ export default function MembersPage() {
       <Card className="relative z-[1]">
         <CardContent className="pt-6">
           <div className="space-y-4">
-            <div className="flex items-end gap-4 pb-4 border-b">
-              <div>
-                <label className="text-sm font-medium mb-2 block">{t("department")}</label>
+            <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4 pb-4 border-b">
+              <div className="w-full sm:w-auto">
+                <label className="text-sm font-medium mb-2 block">所属</label>
                 <Select
                   value={searchCriteria.branch}
                   onValueChange={(value) => 
                     setSearchCriteria({ ...searchCriteria, branch: value })
                   }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full sm:w-[200px]">
                     <SelectValue placeholder={t("select-branch")} />
                   </SelectTrigger>
                   <SelectContent>
@@ -1288,96 +1394,95 @@ export default function MembersPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
+              <div className="w-full sm:w-auto">
                 <label className="text-sm font-medium mb-2 block">{t("employee-id")}</label>
                 <Input
                   value={searchCriteria.employeeId}
                   onChange={(e) => setSearchCriteria({ ...searchCriteria, employeeId: e.target.value })}
-                  className="w-32"
+                  className="w-full sm:w-[150px]"
                   placeholder={t("enter-employee-id")}
                 />
               </div>
-              <div>
+              <div className="w-full sm:w-auto">
                 <label className="text-sm font-medium mb-2 block">{t("name")}</label>
                 <Input
                   value={searchCriteria.name}
                   onChange={(e) => setSearchCriteria({ ...searchCriteria, name: e.target.value })}
-                  className="w-48"
+                  className="w-full sm:w-[200px]"
                   placeholder={t("enter-name")}
                 />
               </div>
-              <div className="flex items-end gap-4">
+              <div className="flex gap-2 w-full sm:w-auto mt-4 sm:mt-0">
                 <Button
                   onClick={handleSearch}
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                  className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 text-white"
                 >
-                <Search className="h-4 w-4 mr-2" />
+                  <Search className="h-4 w-4 mr-2" />
                   検索
                 </Button>
                 <Button
                   onClick={handleClearSearch}
                   variant="outline"
+                  className="flex-1 sm:flex-none"
                 >
                   <X className="h-4 w-4 mr-2" />
                   クリア
-              </Button>
+                </Button>
               </div>
             </div>
 
             <div>
-              <div className="flex justify-between items-center mb-4">
-                <div className="flex items-center gap-4">
-                  <h3 className="text-lg font-medium">{t("member-list")}</h3>
-                  <div className="space-x-2">
-                    <Button onClick={handleAddRow} variant="outline">
-                      <Plus className="h-4 w-4 mr-2" />
-                      {t("add-row")}
-                    </Button>
-                    <Button onClick={handleSave} className="bg-blue-600 hover:bg-blue-700">
-                      <Save className="h-4 w-4 mr-2" />
-                      {t("save")}
-                    </Button>
-                  </div>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
+                <h3 className="text-lg font-medium">{t("member-list")}</h3>
+                <div className="flex gap-2 w-full sm:w-auto">
+                  <Button onClick={handleAddRow} variant="outline" className="flex-1 sm:flex-none">
+                    <Plus className="h-4 w-4 mr-2" />
+                    {t("add-row")}
+                  </Button>
+                  <Button onClick={handleSave} className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700">
+                    <Save className="h-4 w-4 mr-2" />
+                    {t("save")}
+                  </Button>
                 </div>
               </div>
 
-              <div className="border rounded-lg overflow-hidden">
-                <div className="overflow-x-auto custom-scrollbar">
-                  <div style={{ minWidth: "2000px" }} className="relative z-[1]">
+              <div className="border rounded-lg">
+                <div className="w-full overflow-x-auto">
+                  <div className="min-w-[1200px] lg:min-w-full">
                     <Table>
                       <TableHeader>
-                        <TableRow>
-                          <TableHead style={{ width: "120px" }}>{t("employee-id")}</TableHead>
-                          <TableHead style={{ width: "160px" }}>{t("department")}</TableHead>
-                          <TableHead style={{ width: "120px" }}>{t("last-name")}</TableHead>
-                          <TableHead style={{ width: "120px" }}>{t("first-name")}</TableHead>
-                          <TableHead style={{ width: "120px" }}>{t("last-name-en")}</TableHead>
-                          <TableHead style={{ width: "120px" }}>{t("first-name-en")}</TableHead>
-                          <TableHead style={{ width: "300px" }}>{t("email")}</TableHead>
-                          <TableHead style={{ width: "200px" }}>担当リーダー</TableHead>
-                          <TableHead style={{ width: "200px" }}>担当サブリーダー</TableHead>
-                          <TableHead style={{ width: "120px" }} className="text-center">{t("leader-permission")}</TableHead>
-                          <TableHead style={{ width: "120px" }} className="text-center">{t("admin-permission")}</TableHead>
-                          <TableHead style={{ width: "120px" }}>ステータス</TableHead>
-                          <TableHead style={{ width: "120px" }}>操作</TableHead>
+                        <TableRow className="[&>th]:px-0 [&>th]:text-center">
+                          <TableHead className="w-[6%]">{t("employee-id")}</TableHead>
+                          <TableHead className="w-[10%]">所属</TableHead>
+                          <TableHead className="w-[7%]">{t("last-name")}</TableHead>
+                          <TableHead className="w-[7%]">{t("first-name")}</TableHead>
+                          <TableHead className="w-[7%]">{t("last-name-en")}</TableHead>
+                          <TableHead className="w-[7%]">{t("first-name-en")}</TableHead>
+                          <TableHead className="w-[11%]">{t("email")}</TableHead>
+                          <TableHead className="w-[12%]">担当リーダー</TableHead>
+                          <TableHead className="w-[12%]">担当サブリーダー</TableHead>
+                          <TableHead className="w-[6%]">{t("leader-permission")}</TableHead>
+                          <TableHead className="w-[6%]">{t("admin-permission")}</TableHead>
+                          <TableHead className="w-[5%]">ステータス</TableHead>
+                          <TableHead className="w-[4%]">操作</TableHead>
                         </TableRow>
                       </TableHeader>
-                      <TableBody>
+                      <TableBody className="[&>tr>td]:px-1">
                         {members.map((member) => (
                           <TableRow key={member.id}>
-                            <TableCell className="p-2">{renderInputField(member, 'employee_id')}</TableCell>
-                            <TableCell className="p-2">{renderInputField(member, 'branch')}</TableCell>
-                            <TableCell className="p-2">{renderInputField(member, 'last_name')}</TableCell>
-                            <TableCell className="p-2">{renderInputField(member, 'first_name')}</TableCell>
-                            <TableCell className="p-2">{renderInputField(member, 'last_name_en')}</TableCell>
-                            <TableCell className="p-2">{renderInputField(member, 'first_name_en')}</TableCell>
-                            <TableCell className="p-2">{renderInputField(member, 'email')}</TableCell>
-                            <TableCell className="p-2">{renderInputField(member, 'leader')}</TableCell>
-                            <TableCell className="p-2">{renderInputField(member, 'subleader')}</TableCell>
-                            <TableCell className="p-2">{renderInputField(member, 'is_leader')}</TableCell>
-                            <TableCell className="p-2">{renderInputField(member, 'is_admin')}</TableCell>
-                            <TableCell className="p-2">{getStatusText(member.registration_status)}</TableCell>
-                            <TableCell className="p-2">
+                            <TableCell className="py-1">{renderInputField(member, 'employee_id')}</TableCell>
+                            <TableCell className="py-1">{renderInputField(member, 'branch')}</TableCell>
+                            <TableCell className="py-1">{renderInputField(member, 'last_name')}</TableCell>
+                            <TableCell className="py-1">{renderInputField(member, 'first_name')}</TableCell>
+                            <TableCell className="py-1">{renderInputField(member, 'last_name_en')}</TableCell>
+                            <TableCell className="py-1">{renderInputField(member, 'first_name_en')}</TableCell>
+                            <TableCell className="py-1">{renderInputField(member, 'email')}</TableCell>
+                            <TableCell className="py-1">{renderInputField(member, 'leader')}</TableCell>
+                            <TableCell className="py-1">{renderInputField(member, 'subleader')}</TableCell>
+                            <TableCell className="py-1">{renderInputField(member, 'is_leader')}</TableCell>
+                            <TableCell className="py-1">{renderInputField(member, 'is_admin')}</TableCell>
+                            <TableCell className="py-1">{getStatusText(member.registration_status)}</TableCell>
+                            <TableCell className="py-1">
                               {renderActionButtons(member)}
                             </TableCell>
                           </TableRow>
@@ -1385,19 +1490,19 @@ export default function MembersPage() {
 
                         {editingMembers.map((member) => (
                           <TableRow key={member.id}>
-                            <TableCell className="p-2">{renderInputField(member, 'employee_id')}</TableCell>
-                            <TableCell className="p-2">{renderInputField(member, 'branch')}</TableCell>
-                            <TableCell className="p-2">{renderInputField(member, 'last_name')}</TableCell>
-                            <TableCell className="p-2">{renderInputField(member, 'first_name')}</TableCell>
-                            <TableCell className="p-2">{renderInputField(member, 'last_name_en')}</TableCell>
-                            <TableCell className="p-2">{renderInputField(member, 'first_name_en')}</TableCell>
-                            <TableCell className="p-2">{renderInputField(member, 'email')}</TableCell>
-                            <TableCell className="p-2">{renderInputField(member, 'leader')}</TableCell>
-                            <TableCell className="p-2">{renderInputField(member, 'subleader')}</TableCell>
-                            <TableCell className="p-2">{renderInputField(member, 'is_leader')}</TableCell>
-                            <TableCell className="p-2">{renderInputField(member, 'is_admin')}</TableCell>
-                            <TableCell className="p-2">{member.registration_status}</TableCell>
-                            <TableCell className="p-2">
+                            <TableCell className="py-1">{renderInputField(member, 'employee_id')}</TableCell>
+                            <TableCell className="py-1">{renderInputField(member, 'branch')}</TableCell>
+                            <TableCell className="py-1">{renderInputField(member, 'last_name')}</TableCell>
+                            <TableCell className="py-1">{renderInputField(member, 'first_name')}</TableCell>
+                            <TableCell className="py-1">{renderInputField(member, 'last_name_en')}</TableCell>
+                            <TableCell className="py-1">{renderInputField(member, 'first_name_en')}</TableCell>
+                            <TableCell className="py-1">{renderInputField(member, 'email')}</TableCell>
+                            <TableCell className="py-1">{renderInputField(member, 'leader')}</TableCell>
+                            <TableCell className="py-1">{renderInputField(member, 'subleader')}</TableCell>
+                            <TableCell className="py-1">{renderInputField(member, 'is_leader')}</TableCell>
+                            <TableCell className="py-1">{renderInputField(member, 'is_admin')}</TableCell>
+                            <TableCell className="py-1">{getStatusText('00')}</TableCell>
+                            <TableCell className="py-1">
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -1440,7 +1545,7 @@ export default function MembersPage() {
       </AlertDialog>
 
       <Dialog open={leaderDialogOpen} onOpenChange={setLeaderDialogOpen}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="w-[95vw] max-w-[600px] h-[90vh] sm:h-auto">
           <DialogHeader>
             <DialogTitle>
               {currentEditingMember?.field === 'leader' ? t("select-leader") : t("select-sub-leader")}
@@ -1451,21 +1556,20 @@ export default function MembersPage() {
           </DialogHeader>
           
           <div className="space-y-4">
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <label className="text-sm font-medium mb-2 block">{t("department")}</label>
+                <label className="text-sm font-medium mb-2 block">所属</label>
                 <Select
                   value={leaderSearchCriteria.department}
                   onValueChange={(value) => setLeaderSearchCriteria({ ...leaderSearchCriteria, department: value })}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder={t("select-department")} />
+                    <SelectValue placeholder="所属を選択" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">{t("select-all")}</SelectItem>
-                    {branches.map((dept) => (
-                      <SelectItem key={dept.code} value={dept.code}>
-                        {language === 'ja' ? dept.name_jp : dept.name_en}
+                    {branches.map((branch) => (
+                      <SelectItem key={branch.code} value={branch.code}>
+                        {language === 'ja' ? branch.name_jp : branch.name_en}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1489,33 +1593,38 @@ export default function MembersPage() {
               </div>
             </div>
 
-            <div className="border rounded-lg overflow-hidden max-h-[400px] overflow-y-auto">
+            <div className="border rounded-lg overflow-hidden max-h-[calc(90vh-300px)] sm:max-h-[400px] overflow-y-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-24">{t("employee-id")}</TableHead>
                     <TableHead className="w-48">{t("name")}</TableHead>
-                    <TableHead className="w-40">{t("department")}</TableHead>
+                    <TableHead className="w-40">所属</TableHead>
                     <TableHead className="w-24"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredMembers.length > 0 ? (
-                    filteredMembers.map((member) => (
-                      <TableRow key={member.id} className="hover:bg-blue-50">
-                        <TableCell className="py-1">{member.employee_id}</TableCell>
-                        <TableCell className="py-1">{member.last_name} {member.first_name}</TableCell>
-                        <TableCell className="py-1">{member.branch}</TableCell>
-                        <TableCell className="py-1">
-                          <Button
-                            onClick={() => handleLeaderSelect(member)}
-                            className="h-7 w-full bg-blue-600 hover:bg-blue-700 text-white"
-                          >
-                            {t("select")}
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
+                    filteredMembers.map((member) => {
+                      const branchName = branches.find(b => b.code === member.branch)
+                      return (
+                        <TableRow key={member.id} className="hover:bg-blue-50">
+                          <TableCell className="py-1">{member.employee_id}</TableCell>
+                          <TableCell className="py-1">{member.last_name} {member.first_name}</TableCell>
+                          <TableCell className="py-1">
+                            {branchName ? (language === 'ja' ? branchName.name_jp : branchName.name_en) : ''}
+                          </TableCell>
+                          <TableCell className="py-1">
+                            <Button
+                              onClick={() => handleLeaderSelect(member)}
+                              className="h-7 w-full bg-blue-600 hover:bg-blue-700 text-white"
+                            >
+                              {t("select")}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })
                   ) : (
                     <TableRow>
                       <TableCell colSpan={4} className="text-center py-4 text-gray-500">
@@ -1531,8 +1640,8 @@ export default function MembersPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => {
               setLeaderDialogOpen(false)
-              setLeaderSearchCriteria({ employeeId: "", name: "", department: "all" })
-            }}>
+              setLeaderSearchCriteria({ employeeId: "", name: "", department: "" })
+            }} className="w-full sm:w-auto">
               {t("cancel")}
             </Button>
           </DialogFooter>
