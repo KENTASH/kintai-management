@@ -1,313 +1,301 @@
 {
-  "members_save": {
-      "save_conditions": {
-          "required_system_fields": [
-              "employee_id"
-          ],
-          "required_business_fields": [
-              "branch",
-              "last_name",
-              "first_name",
-              "last_name_en",
-              "first_name_en",
-              "email"
-          ],
-          "optional_fields": [
-              "leader",
-              "subleader",
-              "leader_role",
-              "admin_role"
-          ]
-      },
-      "tables": {
-          "users": {
-              "insert": {
-                  "employee_id": "public.users.employee_id",
-                  "branch": "public.users.branch",
-                  "last_name": "public.users.last_name",
-                  "first_name": "public.users.first_name",
-                  "last_name_en": "public.users.last_name_en",
-                  "first_name_en": "public.users.first_name_en",
-                  "email": "public.users.email",
-                  "registration_status": {
-                      "default": "01"
-                  }
-              },
-              "update": {
-                  "branch": "public.users.branch",
-                  "last_name": "public.users.last_name",
-                  "first_name": "public.users.first_name",
-                  "last_name_en": "public.users.last_name_en",
-                  "first_name_en": "public.users.first_name_en",
-                  "email": "public.users.email"
-              },
-              "key_field": "employee_id"
-          },
-          "user_supervisors": {
-              "insert": {
-                  "user_id": "public.users.id",
-                  "supervisor_type": "leader",
-                  "pic_user_id": "担当リーダー"
-              },
-              "update": {
-                  "condition": {
-                      "user_id": "public.users.id",
-                      "supervisor_type": "leader"
-                  },
-                  "set": {
-                      "pic_user_id": "担当リーダー"
-                  },
-                  "null_handling": "ブランクの場合はNULLをセット"
-              },
-              "insert_subleader": {
-                  "user_id": "public.users.id",
-                  "supervisor_type": "subleader",
-                  "pic_user_id": "担当サブリーダー"
-              },
-              "update_subleader": {
-                  "condition": {
-                      "user_id": "public.users.id",
-                      "supervisor_type": "subleader"
-                  },
-                  "set": {
-                      "pic_user_id": "担当サブリーダー"
-                  },
-                  "null_handling": "ブランクの場合はNULLをセット"
-              }
-          },
-          "user_roles": {
-              "insert_leader": {
-                  "user_id": "public.users.id",
-                  "user_role_id": "leader"
-              },
-              "insert_admin": {
-                  "user_id": "public.users.id",
-                  "user_role_id": "admin"
-              },
-              "delete_leader": {
-                  "condition": {
-                      "user_id": "public.users.id",
-                      "user_role_id": "leader"
-                  },
-                  "action": "DELETE"
-              },
-              "delete_admin": {
-                  "condition": {
-                      "user_id": "public.users.id",
-                      "user_role_id": "admin"
-                  },
-                  "action": "DELETE"
-              },
-              "update_conditions": {
-                  "leader": {
-                      "add_if_not_exist": true,
-                      "delete_if_unchecked": true
-                  },
-                  "admin": {
-                      "add_if_not_exist": true,
-                      "delete_if_unchecked": true
-                  }
-              }
-          }
-      },
-      "messages": {
-          "success": "保存が完了しました。",
-          "validation_error": "入力内容に不備があります。",
-          "unexpected_error": "想定外のエラーが発生しました。"
-      },
-      "validation": {
-          "highlight_invalid_fields": true
-      }
-  },
-  "members_initialize": {
-      "page": "members/pages",
-      "initialization": {
-          "fetch_branch_master": {
-              "table": "public.branch_master",
-              "columns": [
-                  "code",
-                  "name_jp",
-                  "name_en"
-              ]
-          },
-          "set_select_options": {
-              "target": "所属セレクトボックス",
-              "default_option": {
-                  "value": "",
-                  "label_ja": "全て",
-                  "label_en": "All"
-              },
-              "options": {
-                  "data_source": "public.branch_master",
-                  "value_column": "code",
-                  "label_column": {
-                      "ja_JP": "name_jp",
-                      "en_US": "name_en"
-                  }
-              }
-          },
-          "language_detection": {
-              "table": "public.users",
-              "column": "language",
-              "condition": {
-                  "ja_JP": "name_jp",
-                  "en_US": "name_en"
-              }
-          }
-      },
-      "search_functionality": {
-          "search_button": {
-              "action": "filter_members",
-              "filter_column": "public.branch_master.code",
-              "selected_value_source": "所属セレクトボックス"
-          }
-      }
-  },
-  "members_search": {
-      "search_conditions": [
-          {
-              "screen_field": "所属",
-              "db_table": "public.users",
-              "db_column": "branch",
-              "condition": "=",
-              "input_type": "select",
-              "special_handling": "選択が「全て」の場合は条件を適用しない"
-          },
-          {
-              "screen_field": "社員番号",
-              "db_table": "public.users",
-              "db_column": "employee_id",
-              "condition": "LIKE",
-              "input_type": "text"
-          },
-          {
-              "screen_field": "氏名",
-              "db_table": "public.users",
-              "db_columns": [
-                  "last_name",
-                  "first_name",
-                  "last_name_en",
-                  "first_name_en"
-              ],
-              "condition": "LIKE",
-              "input_type": "text",
-              "special_handling": "OR条件で検索"
-          }
-      ],
-      "search_results": [
-          {
-              "screen_field": "社員番号",
-              "db_table": "public.users",
-              "db_column": "employee_id"
-          },
-          {
-              "screen_field": "所属",
-              "db_table": "public.branch_master",
-              "db_column": "name",
-              "join": {
-                  "type": "INNER",
-                  "on": "public.users.branch = public.branch_master.code"
-              },
-              "special_handling": "言語設定によりname_jpまたはname_enを選択"
-          },
-          {
-              "screen_field": "姓",
-              "db_table": "public.users",
-              "db_column": "last_name"
-          },
-          {
-              "screen_field": "名",
-              "db_table": "public.users",
-              "db_column": "first_name"
-          },
-          {
-              "screen_field": "姓（英語）",
-              "db_table": "public.users",
-              "db_column": "last_name_en"
-          },
-          {
-              "screen_field": "名（英語）",
-              "db_table": "public.users",
-              "db_column": "first_name_en"
-          },
-          {
-              "screen_field": "メール",
-              "db_table": "public.users",
-              "db_column": "email"
-          },
-          {
-              "screen_field": "担当リーダー",
-              "db_table": "public.user_supervisors",
-              "db_column": "pic_user_id",
-              "join": {
-                  "type": "LEFT",
-                  "on": "public.users.id = public.user_supervisors.user_id"
-              },
-              "filter": {
-                  "db_column": "supervisor_type",
-                  "value": "leader"
-              },
-              "special_handling": "該当レコードがない場合はブランク"
-          },
-          {
-              "screen_field": "担当サブリーダー",
-              "db_table": "public.user_supervisors",
-              "db_column": "pic_user_id",
-              "join": {
-                  "type": "LEFT",
-                  "on": "public.users.id = public.user_supervisors.user_id"
-              },
-              "filter": {
-                  "db_column": "supervisor_type",
-                  "value": "subleader"
-              },
-              "special_handling": "該当レコードがない場合はブランク"
-          },
-          {
-              "screen_field": "リーダー権限",
-              "db_table": "public.user_roles",
-              "db_column": "user_role_id",
-              "join": {
-                  "type": "LEFT",
-                  "on": "public.users.id = public.user_roles.user_id"
-              },
-              "filter": {
-                  "db_column": "user_role_id",
-                  "value": "admin"
-              },
-              "special_handling": "該当レコードがない場合はブランク"
-          },
-          {
-              "screen_field": "管理者権限",
-              "db_table": "public.user_roles",
-              "db_column": "user_role_id",
-              "join": {
-                  "type": "LEFT",
-                  "on": "public.users.id = public.user_roles.user_id"
-              },
-              "filter": {
-                  "db_column": "user_role_id",
-                  "value": "leader"
-              },
-              "special_handling": "該当レコードがない場合はブランク"
-          },
-          {
-              "screen_field": "ステータス",
-              "db_table": "public.users",
-              "db_column": "registration_status",
-              "mapping": {
-                  "00": "未登録",
-                  "01": "仮登録済み",
-                  "02": "招待済み",
-                  "03": "認証済み",
-                  "99": "廃止済み"
-              }
-          }
-      ],
-      "messages": {
-          "success": "検索が完了しました。",
-          "no_results": "検索結果がありません。",
-          "error": "想定外のエラーが発生しました。"
-      }
-  }
+    "members_save": {
+        "save_conditions": {
+            "required_system_fields": ["employee_id"],
+            "required_business_fields": [
+                "branch", "last_name", "first_name", "last_name_en", "first_name_en", "email"
+            ],
+            "optional_fields": ["leader", "subleader", "leader_role", "admin_role"]
+        },
+        "tables": {
+            "users": {
+                "insert": {
+                    "employee_id": "public.users.employee_id",
+                    "branch": "public.users.branch",
+                    "last_name": "public.users.last_name",
+                    "first_name": "public.users.first_name",
+                    "last_name_en": "public.users.last_name_en",
+                    "first_name_en": "public.users.first_name_en",
+                    "email": "public.users.email",
+                    "registration_status": "'01'",
+                    "is_active": true,
+                    "created_at": "now()",
+                    "updated_at": "now()",
+                    "created_by": "auth.uid()",
+                    "updated_by": "auth.uid()"
+                },
+                "update": {
+                    "branch": "public.users.branch",
+                    "last_name": "public.users.last_name",
+                    "first_name": "public.users.first_name",
+                    "last_name_en": "public.users.last_name_en",
+                    "first_name_en": "public.users.first_name_en",
+                    "email": "public.users.email",
+                    "updated_at": "now()",
+                    "updated_by": "auth.uid()"
+                },
+                "key_field": "employee_id",
+                "return_field": "id AS user_id"
+            },
+            "user_supervisors": {
+                "insert": {
+                    "user_id": "user_id",
+                    "supervisor_type": "'leader'",
+                    "pic_user_id": "担当リーダー",
+                    "created_at": "now()",
+                    "updated_at": "now()",
+                    "created_by": "auth.uid()",
+                    "updated_by": "auth.uid()"
+                },
+                "update": {
+                    "condition": {"user_id": "user_id", "supervisor_type": "'leader'"},
+                    "set": {"pic_user_id": "担当リーダー"},
+                    "null_handling": "ブランクの場合はNULLをセット"
+                },
+                "insert_subleader": {
+                    "user_id": "user_id",
+                    "supervisor_type": "'subleader'",
+                    "pic_user_id": "担当サブリーダー",
+                    "created_at": "now()",
+                    "updated_at": "now()",
+                    "created_by": "auth.uid()",
+                    "updated_by": "auth.uid()"
+                },
+                "update_subleader": {
+                    "condition": {"user_id": "user_id", "supervisor_type": "'subleader'"},
+                    "set": {"pic_user_id": "担当サブリーダー"},
+                    "null_handling": "ブランクの場合はNULLをセット"
+                }
+            },
+            "user_roles": {
+                "insert_leader": {
+                    "user_id": "user_id",
+                    "user_role_id": "'leader'",
+                    "created_at": "now()",
+                    "updated_at": "now()",
+                    "created_by": "auth.uid()",
+                    "updated_by": "auth.uid()"
+                },
+                "insert_admin": {
+                    "user_id": "user_id",
+                    "user_role_id": "'admin'",
+                    "created_at": "now()",
+                    "updated_at": "now()",
+                    "created_by": "auth.uid()",
+                    "updated_by": "auth.uid()"
+                },
+                "delete_leader": {
+                    "condition": {"user_id": "user_id", "user_role_id": "'leader'"},
+                    "action": "DELETE"
+                },
+                "delete_admin": {
+                    "condition": {"user_id": "user_id", "user_role_id": "'admin'"},
+                    "action": "DELETE"
+                },
+                "update_conditions": {
+                    "leader": {"add_if_not_exist": true, "delete_if_unchecked": true},
+                    "admin": {"add_if_not_exist": true, "delete_if_unchecked": true}
+                }
+            }
+        },
+        "messages": {
+            "success": "保存が完了しました。",
+            "validation_error": "入力内容に不備があります。",
+            "unexpected_error": "想定外のエラーが発生しました。"
+        },
+        "validation": {
+            "highlight_invalid_fields": true
+        }
+    },
+    "members_initialize": {
+        "page": "members/pages",
+        "initialization": {
+            "fetch_branch_master": {
+                "table": "public.branch_master",
+                "columns": [
+                    "code",
+                    "name_jp",
+                    "name_en"
+                ]
+            },
+            "set_select_options": {
+                "target": "所属セレクトボックス",
+                "default_option": {
+                    "value": "",
+                    "label_ja": "全て",
+                    "label_en": "All"
+                },
+                "options": {
+                    "data_source": "public.branch_master",
+                    "value_column": "code",
+                    "label_column": {
+                        "ja_JP": "name_jp",
+                        "en_US": "name_en"
+                    }
+                }
+            },
+            "language_detection": {
+                "table": "public.users",
+                "column": "language",
+                "condition": {
+                    "ja_JP": "name_jp",
+                    "en_US": "name_en"
+                }
+            }
+        },
+        "search_functionality": {
+            "search_button": {
+                "action": "filter_members",
+                "filter_column": "public.branch_master.code",
+                "selected_value_source": "所属セレクトボックス"
+            }
+        }
+    },
+    "members_search": {
+        "search_conditions": [
+            {
+                "screen_field": "所属",
+                "db_table": "public.users",
+                "db_column": "branch",
+                "condition": "=",
+                "input_type": "select",
+                "special_handling": "選択が「全て」の場合は条件を適用しない"
+            },
+            {
+                "screen_field": "社員番号",
+                "db_table": "public.users",
+                "db_column": "employee_id",
+                "condition": "LIKE",
+                "input_type": "text"
+            },
+            {
+                "screen_field": "氏名",
+                "db_table": "public.users",
+                "db_columns": [
+                    "last_name",
+                    "first_name",
+                    "last_name_en",
+                    "first_name_en"
+                ],
+                "condition": "LIKE",
+                "input_type": "text",
+                "special_handling": "OR条件で検索"
+            }
+        ],
+        "search_results": [
+            {
+                "screen_field": "社員番号",
+                "db_table": "public.users",
+                "db_column": "employee_id"
+            },
+            {
+                "screen_field": "所属",
+                "db_table": "public.branch_master",
+                "db_column": "name",
+                "join": {
+                    "type": "INNER",
+                    "on": "public.users.branch = public.branch_master.code"
+                },
+                "special_handling": "言語設定によりname_jpまたはname_enを選択"
+            },
+            {
+                "screen_field": "姓",
+                "db_table": "public.users",
+                "db_column": "last_name"
+            },
+            {
+                "screen_field": "名",
+                "db_table": "public.users",
+                "db_column": "first_name"
+            },
+            {
+                "screen_field": "姓（英語）",
+                "db_table": "public.users",
+                "db_column": "last_name_en"
+            },
+            {
+                "screen_field": "名（英語）",
+                "db_table": "public.users",
+                "db_column": "first_name_en"
+            },
+            {
+                "screen_field": "メール",
+                "db_table": "public.users",
+                "db_column": "email"
+            },
+            {
+                "screen_field": "担当リーダー",
+                "db_table": "public.user_supervisors",
+                "db_column": "pic_user_id",
+                "join": {
+                    "type": "LEFT",
+                    "on": "public.users.id = public.user_supervisors.user_id"
+                },
+                "filter": {
+                    "db_column": "supervisor_type",
+                    "value": "leader"
+                },
+                "special_handling": "該当レコードがない場合はブランク"
+            },
+            {
+                "screen_field": "担当サブリーダー",
+                "db_table": "public.user_supervisors",
+                "db_column": "pic_user_id",
+                "join": {
+                    "type": "LEFT",
+                    "on": "public.users.id = public.user_supervisors.user_id"
+                },
+                "filter": {
+                    "db_column": "supervisor_type",
+                    "value": "subleader"
+                },
+                "special_handling": "該当レコードがない場合はブランク"
+            },
+            {
+                "screen_field": "リーダー権限",
+                "db_table": "public.user_roles",
+                "db_column": "user_role_id",
+                "join": {
+                    "type": "LEFT",
+                    "on": "public.users.id = public.user_roles.user_id"
+                },
+                "filter": {
+                    "db_column": "user_role_id",
+                    "value": "admin"
+                },
+                "special_handling": "該当レコードがない場合はブランク"
+            },
+            {
+                "screen_field": "管理者権限",
+                "db_table": "public.user_roles",
+                "db_column": "user_role_id",
+                "join": {
+                    "type": "LEFT",
+                    "on": "public.users.id = public.user_roles.user_id"
+                },
+                "filter": {
+                    "db_column": "user_role_id",
+                    "value": "leader"
+                },
+                "special_handling": "該当レコードがない場合はブランク"
+            },
+            {
+                "screen_field": "ステータス",
+                "db_table": "public.users",
+                "db_column": "registration_status",
+                "mapping": {
+                    "00": "未登録",
+                    "01": "仮登録済み",
+                    "02": "招待済み",
+                    "03": "認証済み",
+                    "99": "廃止済み"
+                }
+            }
+        ],
+        "messages": {
+            "success": "検索が完了しました。",
+            "no_results": "検索結果がありません。",
+            "error": "想定外のエラーが発生しました。"
+        }
+    }
 }

@@ -10,7 +10,7 @@
               },
               "auth_id": {
                   "type": "uuid",
-                  "not_null": true
+                  "not_null": false
               },
               "employee_id": {
                   "type": "varchar(20)",
@@ -20,7 +20,8 @@
               "email": {
                   "type": "varchar(255)",
                   "not_null": true,
-                  "unique": true
+                  "unique": true,
+                  "description": "auth.users.email との参照キー"
               },
               "last_name": {
                   "type": "varchar(50)",

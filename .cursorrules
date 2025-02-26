@@ -78,8 +78,12 @@
 - **全ての主要変更を `README.md` に記録**。
 - **Jest または Cypress を使用した自動テストを実装**。
 - PR マージ前に以下を検証:
-  - データベースの変更が `config/database/schema.json` に一致するか。
+  - 業務機能に関するデータベースの変更が `config/database/public.schema.json` に一致するか。
+  - 認証に関するデータベースの変更が `config/database/auth.schema.json` に一致するか。
   - API レスポンスが `config/api/endpoints.json` に準拠しているか。
+
+## バグ修正
+console.logを仕込んでステップ・バイ・ステップで原因究明に努めてください
 
 ## エラーハンドリング
 - **API 障害やデータベーストランザクションに対して適切なエラーハンドリングを実装**。

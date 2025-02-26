@@ -100,6 +100,7 @@ interface ValidationError {
 interface Message {
   type: 'success' | 'error' | 'info'
   text: string
+  details?: any  // エラーの詳細情報
   persistent?: boolean  // フェードアウトしないフラグ
   position?: 'top' | 'bottom'  // 表示位置
   alignment?: 'left' | 'center'  // 文字寄せ
@@ -663,21 +664,23 @@ export default function MembersPage() {
   // バリデーション関数の修正
   const validateMember = (member: MemberFormData): ValidationError[] => {
     const errors: ValidationError[] = [];
-        
-        // システム必須項目のチェック
+    
+    // システム必須項目のチェック
     if (!member.employee_id || typeof member.employee_id !== 'string' || !member.employee_id.trim()) {
       errors.push({ field: 'employee_id', message: '社員番号は必須です' });
-        }
-        
-        // 業務必須項目のチェック
+    }
+    
+    // 業務必須項目のチェック
     const requiredFields: { field: keyof MemberFormData; label: string }[] = [
-          { field: 'branch', label: '部署' },
-          { field: 'last_name', label: '姓' },
-          { field: 'first_name', label: '名' },
-          { field: 'email', label: 'メールアドレス' }
-        ];
+      { field: 'branch', label: '部署' },
+      { field: 'last_name', label: '姓' },
+      { field: 'first_name', label: '名' },
+      { field: 'last_name_en', label: '姓（英語）' },
+      { field: 'first_name_en', label: '名（英語）' },
+      { field: 'email', label: 'メールアドレス' }
+    ];
 
-        requiredFields.forEach(({ field, label }) => {
+    requiredFields.forEach(({ field, label }) => {
       const value = member[field];
       if (!value || typeof value !== 'string' || !value.trim()) {
         errors.push({ field, message: `${label}は必須です` });
@@ -694,21 +697,30 @@ export default function MembersPage() {
 
   // 保存処理の修正
   const handleSave = async () => {
+    console.log('handleSave started');
     setIsLoading(true)
     const supabase = newClient()
     
     try {
-      // 現在のユーザーIDを取得
+      console.log('Getting user info...');
       const { data: { user }, error: userError } = await supabase.auth.getUser()
+      console.log('User info result:', { user, error: userError });
+
       if (userError) throw userError
       if (!user) throw new Error('ユーザー情報が取得できません')
 
-      // 1. 変更検知の改善
+      console.log('Current state:', {
+        members,
+        originalMembers,
+        editingMembers
+      });
+
+      // 1. 変更検知
       const changedMembers = members.filter(current => {
         const original = originalMembers.find(orig => orig.id === current.id)
         if (!original) return false
 
-        return (
+        const hasChanged = (
           current.last_name !== original.last_name ||
           current.first_name !== original.first_name ||
           current.last_name_en !== original.last_name_en ||
@@ -718,10 +730,53 @@ export default function MembersPage() {
           current.roles.is_leader !== original.roles.is_leader ||
           current.roles.is_admin !== original.roles.is_admin ||
           JSON.stringify(current.supervisor_info) !== JSON.stringify(original.supervisor_info)
-        )
+        );
+
+        console.log('Change detection for member:', {
+          id: current.id,
+          hasChanged,
+          current,
+          original
+        });
+
+        return hasChanged;
+      }).map(member => ({
+        ...member,
+        updated_by: user.id
+      }))
+
+      // 2. 新規メンバーの準備
+      const newMembers = editingMembers.map(member => {
+        // idを除外し、必要なフィールドを追加
+        const { id, ...memberWithoutId } = member;
+        return {
+          ...memberWithoutId,
+          branch: member.branch || 'default',  // branchが未設定の場合のデフォルト値
+          registration_status: '01',  // 仮登録済み
+          is_active: true,
+          created_by: user.id,
+          updated_by: user.id,
+          roles: {
+            is_leader: member.roles?.is_leader || false,
+            is_admin: member.roles?.is_admin || false
+          },
+          supervisor_info: {
+            leader: member.supervisor_info?.leader || null,
+            subleader: member.supervisor_info?.subleader || null
+          }
+        }
       })
 
-      if (changedMembers.length === 0 && editingMembers.length === 0) {
+      console.log('Prepared data:', {
+        changedMembersCount: changedMembers.length,
+        newMembersCount: newMembers.length,
+        changedMembers,
+        newMembers
+      });
+
+      // データの検証
+      if (changedMembers.length === 0 && newMembers.length === 0) {
+        console.log('No data to update');
         setMessage({
           type: 'info',
           text: t('no-data-to-update'),
@@ -732,217 +787,63 @@ export default function MembersPage() {
         return
       }
 
-      // 2. 既存メンバーの更新
-      for (const member of changedMembers) {
-        // 2-1. ユーザー基本情報の更新
-        const { error: updateError } = await supabase
-          .from('users')
-          .update({
-            last_name: member.last_name,
-            first_name: member.first_name,
-            last_name_en: member.last_name_en,
-            first_name_en: member.first_name_en,
-            email: member.email,
-            branch: member.branch
-          })
-          .eq('id', member.id)
+      // 3. API呼び出し
+      console.log('Sending request to API...');
+      const response = await fetch('/api/members/save', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          changedMembers,
+          newMembers
+        })
+      })
 
-        if (updateError) throw updateError
+      const result = await response.json()
+      console.log('API Response:', {
+        status: response.status,
+        ok: response.ok,
+        result
+      });
 
-        // 2-2. 担当リーダー・サブリーダーの更新
-        // まず既存の関連レコードを削除
-        const { error: deleteSupError } = await supabase
-          .from('user_supervisors')
-          .delete()
-          .eq('user_id', member.id)
-
-        if (deleteSupError) throw deleteSupError
-
-        // 新しい関連レコードを追加
-        const supervisorsToInsert = []
-        
-        if (member.supervisor_info.leader) {
-          supervisorsToInsert.push({
-            user_id: member.id,
-            supervisor_type: 'leader',
-            pic_user_id: member.supervisor_info.leader.id,
-            created_by: user.id,
-            updated_by: user.id
-          })
-        }
-        
-        if (member.supervisor_info.subleader) {
-          supervisorsToInsert.push({
-            user_id: member.id,
-            supervisor_type: 'subleader',
-            pic_user_id: member.supervisor_info.subleader.id,
-            created_by: user.id,
-            updated_by: user.id
-          })
-        }
-
-        if (supervisorsToInsert.length > 0) {
-          const { error: insertSupError } = await supabase
-            .from('user_supervisors')
-            .insert(supervisorsToInsert)
-
-          if (insertSupError) throw insertSupError
-        }
-
-        // 2-3. リーダー権限の更新
-        if (!member.roles.is_leader) {
-          // リーダー権限を削除
-          const { error: deleteLeaderError } = await supabase
-            .from('user_roles')
-            .delete()
-            .eq('user_id', member.id)
-            .eq('user_role_id', 'leader')
-
-          if (deleteLeaderError) throw deleteLeaderError
-        } else {
-          // リーダー権限を追加
-          const { error: insertLeaderError } = await supabase
-            .from('user_roles')
-            .upsert({
-              user_id: member.id,
-              user_role_id: 'leader',
-              created_by: user.id,
-              updated_by: user.id
-            }, {
-              onConflict: 'user_id,user_role_id'
-            })
-
-          if (insertLeaderError) throw insertLeaderError
-        }
-
-        // 2-4. 管理者権限の更新
-        if (!member.roles.is_admin) {
-          // 管理者権限を削除
-          const { error: deleteAdminError } = await supabase
-            .from('user_roles')
-            .delete()
-            .eq('user_id', member.id)
-            .eq('user_role_id', 'admin')
-
-          if (deleteAdminError) throw deleteAdminError
-        } else {
-          // 管理者権限を追加
-          const { error: insertAdminError } = await supabase
-            .from('user_roles')
-            .upsert({
-              user_id: member.id,
-              user_role_id: 'admin',
-              created_by: user.id,
-              updated_by: user.id
-            }, {
-              onConflict: 'user_id,user_role_id'
-            })
-
-          if (insertAdminError) throw insertAdminError
-        }
+      if (!response.ok) {
+        console.error('API Error Details:', {
+          status: response.status,
+          statusText: response.statusText,
+          result: result
+        })
+        throw new Error(result.error || 'データの保存に失敗しました')
       }
 
-      // 3. 新規メンバーの追加
-      for (const member of editingMembers) {
-        // 3-1. ユーザー基本情報の追加
-        const { data: newUser, error: insertError } = await supabase
-          .from('users')
-          .insert({
-            employee_id: member.employee_id,
-            last_name: member.last_name,
-            first_name: member.first_name,
-            last_name_en: member.last_name_en,
-            first_name_en: member.first_name_en,
-            email: member.email,
-            branch: member.branch,
-            registration_status: '01',
-            is_active: true
-          })
-          .select()
-          .single()
-
-        if (insertError) throw insertError
-
-        // 3-2. 担当リーダー・サブリーダーの追加
-        const supervisorsToInsert = []
-        
-        if (member.supervisor_info.leader) {
-          supervisorsToInsert.push({
-            user_id: newUser.id,
-            supervisor_type: 'leader',
-            pic_user_id: member.supervisor_info.leader.id,
-            created_by: user.id,
-            updated_by: user.id
-          })
-        }
-        
-        if (member.supervisor_info.subleader) {
-          supervisorsToInsert.push({
-            user_id: newUser.id,
-            supervisor_type: 'subleader',
-            pic_user_id: member.supervisor_info.subleader.id,
-            created_by: user.id,
-            updated_by: user.id
-          })
-        }
-
-        if (supervisorsToInsert.length > 0) {
-          const { error: insertSupError } = await supabase
-            .from('user_supervisors')
-            .insert(supervisorsToInsert)
-
-          if (insertSupError) throw insertSupError
-        }
-
-        // 3-3. 権限情報の追加
-        const rolesToInsert = []
-        if (member.roles.is_leader) {
-          rolesToInsert.push({
-            user_id: newUser.id,
-            user_role_id: 'leader',
-            created_by: user.id,
-            updated_by: user.id
-          })
-        }
-        if (member.roles.is_admin) {
-          rolesToInsert.push({
-            user_id: newUser.id,
-            user_role_id: 'admin',
-            created_by: user.id,
-            updated_by: user.id
-          })
-        }
-
-        if (rolesToInsert.length > 0) {
-          const { error: rolesError } = await supabase
-            .from('user_roles')
-            .insert(rolesToInsert)
-
-          if (rolesError) throw rolesError
-        }
-      }
-
-      // 4. 画面の更新（メッセージ表示前に実行）
+      // 4. 成功時の処理
+      console.log('Save successful, cleaning up...');
       setEditingMembers([])
-      setHasSearched(false)
-      await handleSearch(false)  // メッセージ表示を無効化
-
-      // 5. 成功メッセージの表示（最後に実行）
       setMessage({
         type: 'success',
-        text: t('update-success'),
+        text: result.message || t('update-success'),
         persistent: false
       })
 
+      // 5. 検索条件をリセットして再検索
+      setHasSearched(false)
+      await handleSearch(false)
+
     } catch (error) {
-      console.error('Error in save process:', error)
+      console.error('Error in save process:', {
+        error,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
       setMessage({
         type: 'error',
         text: error instanceof Error ? error.message : t('update-error'),
+        details: error instanceof Error ? error.cause : undefined,
         dismissible: true,
         persistent: true
       })
     } finally {
+      console.log('handleSave completed');
       setIsLoading(false)
     }
   }
@@ -1023,11 +924,13 @@ export default function MembersPage() {
             <SelectValue placeholder={t("select-branch")} />
           </SelectTrigger>
           <SelectContent>
-            {branches.map((branch) => (
-              <SelectItem key={branch.code} value={branch.code}>
-                {language === 'ja' ? branch.name_jp : branch.name_en}
-              </SelectItem>
-            ))}
+            {branches
+              .filter(branch => branch.code !== 'all')  // 「全て」を除外
+              .map((branch) => (
+                <SelectItem key={branch.code} value={branch.code}>
+                  {language === 'ja' ? branch.name_jp : branch.name_en}
+                </SelectItem>
+              ))}
           </SelectContent>
         </Select>
       )

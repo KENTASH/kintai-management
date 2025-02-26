@@ -1,0 +1,163 @@
+{
+  "tables": {
+      "auth_users": {
+          "description": "認証情報を管理するテーブル",
+          "columns": {
+              "instance_id": {
+                  "type": "uuid",
+                  "not_null": false
+              },
+              "id": {
+                  "type": "uuid",
+                  "primary_key": true,
+                  "not_null": true
+              },
+              "aud": {
+                  "type": "varchar(255)",
+                  "not_null": false
+              },
+              "role": {
+                  "type": "varchar(255)",
+                  "not_null": false
+              },
+              "email": {
+                  "type": "varchar(255)",
+                  "not_null": false,
+                  "unique": true
+              },
+              "encrypted_password": {
+                  "type": "varchar(255)",
+                  "not_null": false
+              },
+              "email_confirmed_at": {
+                  "type": "timestamp",
+                  "not_null": false
+              },
+              "invited_at": {
+                  "type": "timestamp",
+                  "not_null": false
+              },
+              "confirmation_token": {
+                  "type": "varchar(255)",
+                  "not_null": false,
+                  "default": "''"
+              },
+              "confirmation_sent_at": {
+                  "type": "timestamp",
+                  "not_null": false
+              },
+              "recovery_token": {
+                  "type": "varchar(255)",
+                  "not_null": false
+              },
+              "recovery_sent_at": {
+                  "type": "timestamp",
+                  "not_null": false
+              },
+              "email_change_token_new": {
+                  "type": "varchar(255)",
+                  "not_null": false
+              },
+              "email_change": {
+                  "type": "varchar(255)",
+                  "not_null": false
+              },
+              "email_change_sent_at": {
+                  "type": "timestamp",
+                  "not_null": false
+              },
+              "last_sign_in_at": {
+                  "type": "timestamp",
+                  "not_null": false
+              },
+              "raw_app_meta_data": {
+                  "type": "jsonb",
+                  "not_null": false
+              },
+              "raw_user_meta_data": {
+                  "type": "jsonb",
+                  "not_null": false
+              },
+              "is_super_admin": {
+                  "type": "boolean",
+                  "not_null": false
+              },
+              "created_at": {
+                  "type": "timestamp",
+                  "not_null": false,
+                  "default": "CURRENT_TIMESTAMP"
+              },
+              "updated_at": {
+                  "type": "timestamp",
+                  "not_null": false,
+                  "default": "CURRENT_TIMESTAMP",
+                  "on_update": "CURRENT_TIMESTAMP"
+              },
+              "phone": {
+                  "type": "text",
+                  "not_null": false
+              },
+              "phone_confirmed_at": {
+                  "type": "timestamp",
+                  "not_null": false
+              },
+              "phone_change": {
+                  "type": "text",
+                  "not_null": false,
+                  "default": "''"
+              },
+              "phone_change_token": {
+                  "type": "varchar(255)",
+                  "not_null": false,
+                  "default": "''"
+              },
+              "phone_change_sent_at": {
+                  "type": "timestamp",
+                  "not_null": false
+              },
+              "confirmed_at": {
+                  "type": "timestamp",
+                  "not_null": false,
+                  "generated": "LEAST(email_confirmed_at, phone_confirmed_at)"
+              },
+              "email_change_token_current": {
+                  "type": "varchar(255)",
+                  "not_null": false,
+                  "default": "''"
+              },
+              "email_change_confirm_status": {
+                  "type": "smallint",
+                  "not_null": false,
+                  "default": 0
+              },
+              "banned_until": {
+                  "type": "timestamp",
+                  "not_null": false
+              },
+              "reauthentication_token": {
+                  "type": "varchar(255)",
+                  "not_null": false,
+                  "default": "''"
+              },
+              "reauthentication_sent_at": {
+                  "type": "timestamp",
+                  "not_null": false
+              },
+              "is_sso_user": {
+                  "type": "boolean",
+                  "not_null": true,
+                  "default": false
+              },
+              "deleted_at": {
+                  "type": "timestamp",
+                  "not_null": false
+              },
+              "is_anonymous": {
+                  "type": "boolean",
+                  "not_null": true,
+                  "default": false
+              }
+          }
+      }
+  }
+}
