@@ -13,6 +13,7 @@ DECLARE
   update_results jsonb[];
   insert_results jsonb[];
   existing_email text;
+  existing_employee record;
 BEGIN
   -- デバッグ情報の初期化
   debug_info := jsonb_build_object(
@@ -38,6 +39,21 @@ BEGIN
         
         IF existing_email IS NOT NULL THEN
           RAISE EXCEPTION '入力されたメールアドレス（%）はすでに使用されているため登録することはできません。', (member->>'email')::text;
+        END IF;
+      END IF;
+
+      -- 社員番号と所属の組み合わせの重複チェック（自分以外）
+      IF (member->>'employee_id') IS NOT NULL AND (member->>'branch') IS NOT NULL THEN
+        SELECT * INTO existing_employee FROM users 
+        WHERE employee_id = (member->>'employee_id')::text
+        AND branch = (member->>'branch')::text
+        AND is_active = true
+        AND registration_status != '99'
+        AND id != (member->>'id')::uuid
+        LIMIT 1;
+        
+        IF existing_employee IS NOT NULL THEN
+          RAISE EXCEPTION 'すでに同じ所属で同じ社員番号の有効なユーザーが存在しています。';
         END IF;
       END IF;
 
@@ -159,6 +175,20 @@ BEGIN
         
         IF existing_email IS NOT NULL THEN
           RAISE EXCEPTION '入力されたメールアドレス（%）はすでに使用されているため登録することはできません。', (member->>'email')::text;
+        END IF;
+      END IF;
+
+      -- 社員番号と所属の組み合わせの重複チェック
+      IF (member->>'employee_id') IS NOT NULL AND (member->>'branch') IS NOT NULL THEN
+        SELECT * INTO existing_employee FROM users 
+        WHERE employee_id = (member->>'employee_id')::text
+        AND branch = (member->>'branch')::text
+        AND is_active = true
+        AND registration_status != '99'
+        LIMIT 1;
+        
+        IF existing_employee IS NOT NULL THEN
+          RAISE EXCEPTION 'すでに同じ所属で同じ社員番号の有効なユーザーが存在しています。';
         END IF;
       END IF;
 

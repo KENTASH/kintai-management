@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import React from 'react'
 import { createClient, PostgrestError } from '@supabase/supabase-js'
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -246,6 +247,7 @@ export default function MembersPage() {
   const [message, setMessage] = useState<Message | null>(null)
   const [branches, setBranches] = useState<BranchMaster[]>([])
   const [hasSearched, setHasSearched] = useState(false)  // 検索実行フラグを追加
+  const [errorFields, setErrorFields] = useState<{[key: string]: Set<string>}>({}) // エラーフィールドを管理
 
   const emptyMember: Member = {
     id: '',
@@ -641,86 +643,114 @@ export default function MembersPage() {
   }
 
   const handleInputChange = (id: string, field: MemberField, value: string | boolean) => {
-    // メンバーリストを更新
-    const updatedMembers = members.map(member => {
-      if (member.id === id) {
-        if (field === 'is_leader' || field === 'is_admin') {
-          return {
-            ...member,
-            roles: {
-              ...member.roles,
-              [field]: value
+    // 編集中のメンバーの場合
+    if (editingMembers.some(m => m.id === id)) {
+      setEditingMembers(prev => {
+        return prev.map(member => {
+          if (member.id !== id) return member
+
+          if (field === 'is_leader' || field === 'is_admin') {
+            return {
+              ...member,
+              roles: {
+                ...member.roles,
+                [field]: value as boolean
+              }
             }
           }
-        }
-        return { ...member, [field]: value }
-      }
-      return member
-    });
-    
-    // 編集中のメンバーリストを更新
-    const updatedEditingMembers = editingMembers.map(member => {
-      if (member.id === id) {
-        if (field === 'is_leader' || field === 'is_admin') {
-          return {
-            ...member,
-            roles: {
-              ...member.roles,
-              [field]: value
+
+          if (field === 'leader' || field === 'subleader') {
+            return {
+              ...member,
+              supervisor_info: {
+                ...member.supervisor_info,
+                [field]: value
+              }
             }
           }
-        }
-        return { ...member, [field]: value }
-      }
-      return member
-    });
-    
-    // 社員番号が変更された場合は再ソート
-    if (field === 'employee_id') {
-      const sortedMembers = updatedMembers.sort((a, b) => 
-        a.employee_id.localeCompare(b.employee_id)
-      );
-      
-      const sortedEditingMembers = updatedEditingMembers.sort((a, b) => 
-        a.employee_id.localeCompare(b.employee_id)
-      );
-      
-      setMembers(sortedMembers);
-      setEditingMembers(sortedEditingMembers);
-    } else {
-      setMembers(updatedMembers);
-      setEditingMembers(updatedEditingMembers);
+          return { ...member, [field]: value }
+        })
+      })
+      return
     }
+
+    // 既存メンバーの場合
+    setMembers(prev => {
+      return prev.map(member => {
+        if (member.id !== id) return member
+
+        if (field === 'is_leader' || field === 'is_admin') {
+          return {
+            ...member,
+            roles: {
+              ...member.roles,
+              [field]: value as boolean
+            }
+          }
+        }
+
+        if (field === 'leader' || field === 'subleader') {
+          return {
+            ...member,
+            supervisor_info: {
+              ...member.supervisor_info,
+              [field]: value
+            }
+          }
+        }
+        return { ...member, [field]: value }
+      })
+    })
   }
 
   // バリデーション関数の修正
   const validateMember = (member: MemberFormData): ValidationError[] => {
     const errors: ValidationError[] = [];
     
-    // システム必須項目のチェック
+    // 社員番号は必須、数字のみ
     if (!member.employee_id || typeof member.employee_id !== 'string' || !member.employee_id.trim()) {
       errors.push({ field: 'employee_id', message: '社員番号は必須です' });
+    } else if (!/^\d+$/.test(member.employee_id)) {
+      errors.push({ field: 'employee_id', message: '社員番号は数字のみで入力してください' });
     }
     
-    // 業務必須項目のチェック
-    const requiredFields: { field: keyof MemberFormData; label: string }[] = [
-      { field: 'branch', label: '部署' },
-      { field: 'last_name', label: '姓' },
-      { field: 'first_name', label: '名' },
-      { field: 'last_name_en', label: '姓（英語）' },
-      { field: 'first_name_en', label: '名（英語）' },
-      { field: 'email', label: 'メールアドレス' }
-    ];
+    // 所属は必須
+    if (!member.branch || typeof member.branch !== 'string' || !member.branch.trim()) {
+      errors.push({ field: 'branch', message: '所属は必須です' });
+    }
+    
+    // 姓は必須、日本語文字のみ
+    if (!member.last_name || typeof member.last_name !== 'string' || !member.last_name.trim()) {
+      errors.push({ field: 'last_name', message: '姓は必須です' });
+    } else if (!/^[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\s]+$/.test(member.last_name)) {
+      errors.push({ field: 'last_name', message: '姓は日本語で入力してください' });
+    }
+    
+    // 名は必須、日本語文字のみ
+    if (!member.first_name || typeof member.first_name !== 'string' || !member.first_name.trim()) {
+      errors.push({ field: 'first_name', message: '名は必須です' });
+    } else if (!/^[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\s]+$/.test(member.first_name)) {
+      errors.push({ field: 'first_name', message: '名は日本語で入力してください' });
+    }
+    
+    // 姓（英語）は必須、半角文字のみ
+    if (!member.last_name_en || typeof member.last_name_en !== 'string' || !member.last_name_en.trim()) {
+      errors.push({ field: 'last_name_en', message: '姓（英語）は必須です' });
+    } else if (!/^[a-zA-Z\s]+$/.test(member.last_name_en)) {
+      errors.push({ field: 'last_name_en', message: '姓（英語）は半角英字で入力してください' });
+    }
+    
+    // 名（英語）は必須、半角文字のみ
+    if (!member.first_name_en || typeof member.first_name_en !== 'string' || !member.first_name_en.trim()) {
+      errors.push({ field: 'first_name_en', message: '名（英語）は必須です' });
+    } else if (!/^[a-zA-Z\s]+$/.test(member.first_name_en)) {
+      errors.push({ field: 'first_name_en', message: '名（英語）は半角英字で入力してください' });
+    }
 
-    requiredFields.forEach(({ field, label }) => {
-      const value = member[field];
-      if (!value || typeof value !== 'string' || !value.trim()) {
-        errors.push({ field, message: `${label}は必須です` });
-      }
-    });
-
-    // メールアドレスの形式チェック
-    if (member.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(member.email)) {
+    // メールアドレスは必須、メールアドレス形式
+    if (!member.email || typeof member.email !== 'string' || !member.email.trim()) {
+      errors.push({ field: 'email', message: 'メールアドレスは必須です' });
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(member.email)) {
       errors.push({ field: 'email', message: 'メールアドレスの形式が正しくありません' });
     }
 
@@ -732,6 +762,9 @@ export default function MembersPage() {
     console.log('handleSave started');
     setIsLoading(true)
     const supabase = newClient()
+    
+    // エラーフィールドをリセット
+    setErrorFields({})
     
     try {
       console.log('Getting user info...');
@@ -818,6 +851,92 @@ export default function MembersPage() {
         setIsLoading(false)
         return
       }
+      
+      // バリデーションチェック
+      let hasValidationError = false;
+      const errorMessages: string[] = [];
+      
+      // 変更メンバーのバリデーション
+      for (const member of changedMembers) {
+        const memberData: MemberFormData = {
+          id: member.id,
+          employee_id: member.employee_id,
+          branch: member.branch,
+          last_name: member.last_name,
+          first_name: member.first_name,
+          last_name_en: member.last_name_en,
+          first_name_en: member.first_name_en,
+          email: member.email
+        };
+        
+        const errors = validateMember(memberData);
+        if (errors.length > 0) {
+          hasValidationError = true;
+          
+          // エラーフィールドを設定
+          setErrorFields(prev => {
+            const newErrorFields = { ...prev };
+            if (!newErrorFields[member.id]) {
+              newErrorFields[member.id] = new Set();
+            }
+            
+            errors.forEach(error => {
+              newErrorFields[member.id].add(error.field);
+              // エラーメッセージを追加（重複を避けるため）
+              if (!errorMessages.includes(error.message)) {
+                errorMessages.push(error.message);
+              }
+            });
+            
+            return newErrorFields;
+          });
+        }
+      }
+      
+      // 新規メンバーのバリデーション
+      for (let i = 0; i < editingMembers.length; i++) {
+        const member = editingMembers[i];
+        const memberData: MemberFormData = {
+          employee_id: member.employee_id,
+          branch: member.branch,
+          last_name: member.last_name,
+          first_name: member.first_name,
+          last_name_en: member.last_name_en,
+          first_name_en: member.first_name_en,
+          email: member.email
+        };
+        
+        const errors = validateMember(memberData);
+        if (errors.length > 0) {
+          hasValidationError = true;
+          
+          // エラーフィールドを設定
+          setErrorFields(prev => {
+            const newErrorFields = { ...prev };
+            const tempId = `new-${i}`;
+            if (!newErrorFields[tempId]) {
+              newErrorFields[tempId] = new Set();
+            }
+            
+            errors.forEach(error => {
+              newErrorFields[tempId].add(error.field);
+              // エラーメッセージを追加（重複を避けるため）
+              if (!errorMessages.includes(error.message)) {
+                errorMessages.push(error.message);
+              }
+            });
+            
+            return newErrorFields;
+          });
+        }
+      }
+      
+      // バリデーションエラーがある場合は処理を中断
+      if (hasValidationError) {
+        // 複数のエラーメッセージを結合して表示
+        const errorMessage = errorMessages.join('\n');
+        throw new Error(errorMessage);
+      }
 
       // メールアドレスの重複チェック
       // 1. 新規メンバー同士の重複チェック
@@ -828,6 +947,40 @@ export default function MembersPage() {
       
       if (duplicateNewEmails.length > 0) {
         throw new Error(`入力されたメールアドレス（${duplicateNewEmails[0]}）はすでに使用されているため登録することはできません。`);
+      }
+      
+      // 社員番号と所属の組み合わせの重複チェック（新規メンバー）
+      if (newMembers.length > 0) {
+        for (let i = 0; i < newMembers.length; i++) {
+          const newMember = newMembers[i];
+          if (!newMember.employee_id || !newMember.branch) continue;
+          
+          const { data: existingUsers, error: checkError } = await supabase
+            .from('users')
+            .select('id, employee_id, branch, registration_status')
+            .eq('employee_id', newMember.employee_id)
+            .eq('branch', newMember.branch)
+            .eq('is_active', true)
+            .neq('registration_status', '99'); // 廃止済みではないレコードを検索
+            
+          if (checkError) throw checkError;
+          
+          if (existingUsers && existingUsers.length > 0) {
+            // エラーフィールドを設定
+            setErrorFields(prev => {
+              const newErrorFields = { ...prev };
+              // 新規メンバーの場合、インデックスを使用した一時的なIDを生成
+              const tempId = `new-${i}`;
+              if (!newErrorFields[tempId]) {
+                newErrorFields[tempId] = new Set();
+              }
+              newErrorFields[tempId].add('employee_id');
+              newErrorFields[tempId].add('branch');
+              return newErrorFields;
+            });
+            throw new Error(`すでに同じ所属で同じ社員番号の有効なユーザーが存在しています。`);
+          }
+        }
       }
       
       // 2. 新規メンバーと既存メンバーの重複チェック
@@ -862,7 +1015,44 @@ export default function MembersPage() {
           if (checkError) throw checkError;
           
           if (existingUsers && existingUsers.length > 0) {
+            // エラーフィールドを設定
+            setErrorFields(prev => {
+              const newErrorFields = { ...prev };
+              if (!newErrorFields[member.id]) {
+                newErrorFields[member.id] = new Set();
+              }
+              newErrorFields[member.id].add('email');
+              return newErrorFields;
+            });
             throw new Error(`入力されたメールアドレス（${member.email}）はすでに使用されているため登録することはできません。`);
+          }
+          
+          // 社員番号と所属の組み合わせの重複チェック（更新メンバー）
+          if (member.employee_id && member.branch) {
+            const { data: existingEmployees, error: employeeCheckError } = await supabase
+              .from('users')
+              .select('id, employee_id, branch, registration_status')
+              .eq('employee_id', member.employee_id)
+              .eq('branch', member.branch)
+              .eq('is_active', true)
+              .neq('registration_status', '99') // 廃止済みではないレコードを検索
+              .neq('id', member.id); // 自分自身は除外
+              
+            if (employeeCheckError) throw employeeCheckError;
+            
+            if (existingEmployees && existingEmployees.length > 0) {
+              // エラーフィールドを設定
+              setErrorFields(prev => {
+                const newErrorFields = { ...prev };
+                if (!newErrorFields[member.id]) {
+                  newErrorFields[member.id] = new Set();
+                }
+                newErrorFields[member.id].add('employee_id');
+                newErrorFields[member.id].add('branch');
+                return newErrorFields;
+              });
+              throw new Error(`すでに同じ所属で同じ社員番号の有効なユーザーが存在しています。`);
+            }
           }
         }
       }
@@ -978,18 +1168,53 @@ export default function MembersPage() {
   }
 
   const renderInputField = (member: Member, field: MemberField) => {
+    // エラー状態の判定
+    let memberId = member.id;
+    
+    // 新規メンバーの場合、editingMembersの中でのインデックスを使用して一時的なIDを生成
+    if (!memberId && editingMembers.length > 0) {
+      const index = editingMembers.findIndex(m => 
+        m.employee_id === member.employee_id && 
+        m.last_name === member.last_name && 
+        m.first_name === member.first_name
+      );
+      if (index !== -1) {
+        memberId = `new-${index}`;
+      }
+    }
+    
+    const hasError = memberId ? errorFields[memberId]?.has(field as string) : false;
+    const errorStyle = hasError ? 'border-red-500 bg-red-50' : '';
+    
     if (field === 'employee_id') {
       // 既存レコード（members配列に含まれるレコード）の場合はラベル表示
       const isExistingMember = members.some(m => m.id === member.id);
       return isExistingMember ? (
-        <div className="px-2 py-1.5 text-sm">
+        <div className={`px-2 py-1.5 text-sm ${hasError ? 'bg-red-50 border border-red-500 rounded' : ''}`}>
           {member.employee_id}
         </div>
       ) : (
         <Input
           value={member.employee_id || ''}
           onChange={(e) => handleInputChange(member.id, 'employee_id', e.target.value)}
-          className="w-full h-9"
+          className={`w-full h-9 ${errorStyle}`}
+        />
+      )
+    }
+
+    if (field === 'email') {
+      // 既存レコード（members配列に含まれるレコード）の場合はラベル表示
+      const isExistingMember = members.some(m => m.id === member.id);
+      return isExistingMember ? (
+        <div className={`px-2 py-1.5 text-sm ${hasError ? 'bg-red-50 border border-red-500 rounded' : ''}`}>
+          {member.email}
+        </div>
+      ) : (
+        <Input
+          value={member.email || ''}
+          onChange={(e) => handleInputChange(member.id, 'email', e.target.value)}
+          className={`w-full h-9 ${errorStyle}`}
+          type="email"
         />
       )
     }
@@ -1000,12 +1225,12 @@ export default function MembersPage() {
           value={member[field] || ''}
           onValueChange={(value) => handleInputChange(member.id, field, value)}
         >
-          <SelectTrigger className="h-9 w-full">
+          <SelectTrigger className={`h-9 w-full ${errorStyle}`}>
             <SelectValue placeholder={t("select-branch")} />
           </SelectTrigger>
           <SelectContent>
             {branches
-              .filter(branch => branch.code !== 'all')  // 「全て」を除外
+              .filter(branch => branch.code !== 'all')  // "全て"を除外
               .map((branch) => (
                 <SelectItem key={branch.code} value={branch.code}>
                   {language === 'ja' ? branch.name_jp : branch.name_en}
@@ -1061,16 +1286,23 @@ export default function MembersPage() {
       <Input
         value={member[field] || ''}
         onChange={(e) => handleInputChange(member.id, field, e.target.value)}
-        className="h-9 w-full"
-        type={field === 'email' ? 'email' : 'text'}
+        className={`h-9 w-full ${errorStyle}`}
+        type="text"
       />
     )
   }
 
   const filteredMembers = members.filter(member => {
+    // 社員番号の一致確認
     const matchesEmployeeId = member.employee_id.toLowerCase().includes(leaderSearchCriteria.employeeId.toLowerCase())
+    
+    // 名前の一致確認
     const matchesName = `${member.last_name}${member.first_name}`.toLowerCase().includes(leaderSearchCriteria.name.toLowerCase())
+    
+    // 部署の一致確認 - 'all'が選択されている場合はすべての部署を含む
     const matchesDepartment = leaderSearchCriteria.department === "all" || member.branch === leaderSearchCriteria.department
+    
+    // すべての条件に一致するメンバーを返す
     return matchesEmployeeId && matchesName && matchesDepartment
   })
 
@@ -1128,6 +1360,14 @@ export default function MembersPage() {
       info: <Info className="h-5 w-5 text-blue-500" />
     }
 
+    // 改行を含むメッセージを処理
+    const formattedMessage = message.text.split('\n').map((line, index) => (
+      <React.Fragment key={index}>
+        {line}
+        {index < message.text.split('\n').length - 1 && <br />}
+      </React.Fragment>
+    ));
+
     // エラーとワーニングは上部に表示
     if (message.type === 'error') {
       return (
@@ -1146,9 +1386,11 @@ export default function MembersPage() {
                   ${styles[message.type]}
                 `}
               >
-                <div className="flex items-center gap-2">
-                  {icons[message.type]}
-                  <span className="text-sm font-medium whitespace-pre-line">{message.text}</span>
+                <div className="flex items-start gap-2">
+                  <div className="mt-1">
+                    {icons[message.type]}
+                  </div>
+                  <span className="text-sm font-medium whitespace-pre-line">{formattedMessage}</span>
                 </div>
                   <button
                     onClick={() => setMessage(null)}
@@ -1182,7 +1424,7 @@ export default function MembersPage() {
               `}
             >
               {icons[message.type]}
-              <span className="text-sm font-medium whitespace-pre-line">{message.text}</span>
+              <span className="text-sm font-medium whitespace-pre-line">{formattedMessage}</span>
             </motion.div>
           )}
         </AnimatePresence>
