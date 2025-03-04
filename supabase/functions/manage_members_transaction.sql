@@ -12,6 +12,7 @@ DECLARE
   debug_info jsonb;
   update_results jsonb[];
   insert_results jsonb[];
+  existing_email text;
 BEGIN
   -- デバッグ情報の初期化
   debug_info := jsonb_build_object(
@@ -28,6 +29,18 @@ BEGIN
   IF changed_members IS NOT NULL AND jsonb_array_length(changed_members) > 0 THEN
     FOR member IN SELECT * FROM jsonb_array_elements(changed_members)
     LOOP
+      -- メールアドレスの重複チェック（自分以外）
+      IF (member->>'email') IS NOT NULL THEN
+        SELECT email INTO existing_email FROM users 
+        WHERE email = (member->>'email')::text 
+        AND id != (member->>'id')::uuid
+        LIMIT 1;
+        
+        IF existing_email IS NOT NULL THEN
+          RAISE EXCEPTION '入力されたメールアドレス（%）はすでに使用されているため登録することはできません。', (member->>'email')::text;
+        END IF;
+      END IF;
+
       -- 1.1 ユーザー基本情報の更新
       UPDATE users
       SET
@@ -138,6 +151,17 @@ BEGIN
   IF new_members IS NOT NULL AND jsonb_array_length(new_members) > 0 THEN
     FOR member IN SELECT * FROM jsonb_array_elements(new_members)
     LOOP
+      -- メールアドレスの重複チェック
+      IF (member->>'email') IS NOT NULL THEN
+        SELECT email INTO existing_email FROM users 
+        WHERE email = (member->>'email')::text
+        LIMIT 1;
+        
+        IF existing_email IS NOT NULL THEN
+          RAISE EXCEPTION '入力されたメールアドレス（%）はすでに使用されているため登録することはできません。', (member->>'email')::text;
+        END IF;
+      END IF;
+
       -- 2.1 public.usersテーブルへの登録
       INSERT INTO users (
         employee_id,

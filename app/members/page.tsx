@@ -463,8 +463,13 @@ export default function MembersPage() {
         }
       }) as Member[]
 
-      setMembers(formattedUsers || [])
-      setOriginalMembers(formattedUsers || [])
+      // 社員番号の昇順でソート
+      const sortedUsers = formattedUsers.sort((a, b) => 
+        a.employee_id.localeCompare(b.employee_id)
+      );
+
+      setMembers(sortedUsers || [])
+      setOriginalMembers(sortedUsers || [])
 
       // 検索時のメッセージ表示を条件付きに変更
       if (showMessage && !hasSearched) {
@@ -607,7 +612,15 @@ export default function MembersPage() {
   }, [])
 
   const handleAddRow = () => {
-    setEditingMembers([...editingMembers, { ...emptyMember, id: Date.now().toString() }])
+    // 新しい行を追加し、社員番号でソート
+    const newEditingMembers = [...editingMembers, { ...emptyMember, id: Date.now().toString() }];
+    
+    // 既存のメンバーと新規追加行を社員番号でソート
+    const sortedMembers = newEditingMembers.sort((a, b) => 
+      a.employee_id.localeCompare(b.employee_id)
+    );
+    
+    setEditingMembers(sortedMembers);
   }
 
   const handleRemoveRow = (id: string) => {
@@ -628,7 +641,8 @@ export default function MembersPage() {
   }
 
   const handleInputChange = (id: string, field: MemberField, value: string | boolean) => {
-    setMembers(members.map(member => {
+    // メンバーリストを更新
+    const updatedMembers = members.map(member => {
       if (member.id === id) {
         if (field === 'is_leader' || field === 'is_admin') {
           return {
@@ -642,9 +656,10 @@ export default function MembersPage() {
         return { ...member, [field]: value }
       }
       return member
-    }))
+    });
     
-    setEditingMembers(editingMembers.map(member => {
+    // 編集中のメンバーリストを更新
+    const updatedEditingMembers = editingMembers.map(member => {
       if (member.id === id) {
         if (field === 'is_leader' || field === 'is_admin') {
           return {
@@ -658,7 +673,24 @@ export default function MembersPage() {
         return { ...member, [field]: value }
       }
       return member
-    }))
+    });
+    
+    // 社員番号が変更された場合は再ソート
+    if (field === 'employee_id') {
+      const sortedMembers = updatedMembers.sort((a, b) => 
+        a.employee_id.localeCompare(b.employee_id)
+      );
+      
+      const sortedEditingMembers = updatedEditingMembers.sort((a, b) => 
+        a.employee_id.localeCompare(b.employee_id)
+      );
+      
+      setMembers(sortedMembers);
+      setEditingMembers(sortedEditingMembers);
+    } else {
+      setMembers(updatedMembers);
+      setEditingMembers(updatedEditingMembers);
+    }
   }
 
   // バリデーション関数の修正
@@ -785,6 +817,54 @@ export default function MembersPage() {
         })
         setIsLoading(false)
         return
+      }
+
+      // メールアドレスの重複チェック
+      // 1. 新規メンバー同士の重複チェック
+      const newMemberEmails = newMembers.map(member => member.email);
+      const duplicateNewEmails = newMemberEmails.filter((email, index) => 
+        email && newMemberEmails.indexOf(email) !== index
+      );
+      
+      if (duplicateNewEmails.length > 0) {
+        throw new Error(`入力されたメールアドレス（${duplicateNewEmails[0]}）はすでに使用されているため登録することはできません。`);
+      }
+      
+      // 2. 新規メンバーと既存メンバーの重複チェック
+      if (newMembers.length > 0) {
+        const emailsToCheck = newMembers.map(member => member.email).filter(Boolean);
+        
+        if (emailsToCheck.length > 0) {
+          const { data: existingUsers, error: checkError } = await supabase
+            .from('users')
+            .select('email')
+            .in('email', emailsToCheck);
+            
+          if (checkError) throw checkError;
+          
+          if (existingUsers && existingUsers.length > 0) {
+            throw new Error(`入力されたメールアドレス（${existingUsers[0].email}）はすでに使用されているため登録することはできません。`);
+          }
+        }
+      }
+      
+      // 3. 変更メンバーのメールアドレス重複チェック
+      if (changedMembers.length > 0) {
+        for (const member of changedMembers) {
+          if (!member.email) continue;
+          
+          const { data: existingUsers, error: checkError } = await supabase
+            .from('users')
+            .select('email')
+            .eq('email', member.email)
+            .neq('id', member.id);
+            
+          if (checkError) throw checkError;
+          
+          if (existingUsers && existingUsers.length > 0) {
+            throw new Error(`入力されたメールアドレス（${member.email}）はすでに使用されているため登録することはできません。`);
+          }
+        }
       }
 
       // 3. API呼び出し
@@ -953,30 +1033,25 @@ export default function MembersPage() {
     if (field === 'leader' || field === 'subleader') {
       const supervisorInfo = member.supervisor_info[field]
       return (
-        <div className="flex items-center gap-2">
-          <div 
-            onClick={() => openLeaderDialog(member.id, field)}
-            className="flex-1 h-9 px-3 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground cursor-pointer flex items-center text-sm whitespace-nowrap overflow-hidden"
-          >
-            {supervisorInfo ? (
-              <span className="truncate">{supervisorInfo.name}</span>
-            ) : (
-              <span className="text-blue-600 hover:underline">選択してください</span>
-            )}
-          </div>
-          {supervisorInfo && (
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              onClick={(e) => {
-                e.stopPropagation()
-                handleClearSupervisor(member.id, field)
-              }}
-              className="h-9 w-9 hover:bg-red-50 flex-shrink-0"
-            >
-              <X className="h-4 w-4 text-red-600" />
-            </Button>
+        <div 
+          onClick={() => openLeaderDialog(member.id, field)}
+          className="h-9 px-3 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground cursor-pointer flex items-center justify-between text-sm relative"
+        >
+          {supervisorInfo ? (
+            <>
+              <span className="truncate pr-6">{supervisorInfo.name}</span>
+              <span 
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleClearSupervisor(member.id, field)
+                }}
+                className="absolute right-2 hover:bg-red-50 rounded-full p-1 cursor-pointer"
+              >
+                <X className="h-4 w-4 text-red-600" />
+              </span>
+            </>
+          ) : (
+            <span className="text-blue-600 hover:underline">選択してください</span>
           )}
         </div>
       )
@@ -1208,8 +1283,13 @@ export default function MembersPage() {
         }
       })) as Member[]
 
-      setMembers(formattedUsers || [])
-      setOriginalMembers(formattedUsers || [])
+      // 社員番号の昇順でソート
+      const sortedUsers = formattedUsers.sort((a, b) => 
+        a.employee_id.localeCompare(b.employee_id)
+      );
+
+      setMembers(sortedUsers || [])
+      setOriginalMembers(sortedUsers || [])
       
     } catch (error) {
       console.error('Error fetching members:', error)
@@ -1422,11 +1502,11 @@ export default function MembersPage() {
                           <TableHead className="w-[7%]">{t("last-name-en")}</TableHead>
                           <TableHead className="w-[7%]">{t("first-name-en")}</TableHead>
                           <TableHead className="w-[11%]">{t("email")}</TableHead>
-                          <TableHead className="w-[12%]">担当リーダー</TableHead>
-                          <TableHead className="w-[12%]">担当サブリーダー</TableHead>
+                          <TableHead className="w-[10%]">担当リーダー</TableHead>
+                          <TableHead className="w-[10%]">担当サブリーダー</TableHead>
                           <TableHead className="w-[6%]">{t("leader-permission")}</TableHead>
                           <TableHead className="w-[6%]">{t("admin-permission")}</TableHead>
-                          <TableHead className="w-[5%]">ステータス</TableHead>
+                          <TableHead className="w-[9%]">ステータス</TableHead>
                           <TableHead className="w-[4%]">操作</TableHead>
                         </TableRow>
                       </TableHeader>

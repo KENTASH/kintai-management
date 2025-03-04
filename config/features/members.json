@@ -8,6 +8,21 @@
             "optional_fields": ["leader", "subleader", "leader_role", "admin_role"]
         },
         "tables": {
+            "auth_users": {
+                "insert": {
+                    "email": "auth.users.email",
+                    "password": "gen_random_password(32)",
+                    "email_confirmed_at": "NULL",
+                    "raw_app_meta_data": "'{}'::jsonb",
+                    "raw_user_meta_data": "'{}'::jsonb",
+                    "is_super_admin": false,
+                    "role": "'authenticated'",
+                    "created_at": "now()",
+                    "updated_at": "now()"
+                },
+                "key_field": "email",
+                "return_field": "id AS auth_user_id"
+            },
             "users": {
                 "insert": {
                     "employee_id": "public.users.employee_id",
@@ -17,6 +32,7 @@
                     "last_name_en": "public.users.last_name_en",
                     "first_name_en": "public.users.first_name_en",
                     "email": "public.users.email",
+                    "auth_id": "'00000000-0000-0000-0000-000000000000'::uuid",
                     "registration_status": "'01'",
                     "is_active": true,
                     "created_at": "now()",
@@ -95,6 +111,64 @@
                 "update_conditions": {
                     "leader": {"add_if_not_exist": true, "delete_if_unchecked": true},
                     "admin": {"add_if_not_exist": true, "delete_if_unchecked": true}
+                }
+            }
+        },
+        "transaction": {
+            "steps": [
+                {
+                    "step": "auth_users.insert",
+                    "required": true,
+                    "error_message": "認証ユーザーの作成に失敗しました。"
+                },
+                {
+                    "step": "users.insert",
+                    "required": true,
+                    "dependencies": ["auth_users.insert"],
+                    "error_message": "ユーザー情報の登録に失敗しました。"
+                },
+                {
+                    "step": "user_supervisors.insert",
+                    "required": false,
+                    "dependencies": ["users.insert"],
+                    "condition": "member.supervisor_info?.leader != null",
+                    "error_message": "担当者情報の登録に失敗しました。"
+                },
+                {
+                    "step": "user_supervisors.insert_subleader",
+                    "required": false,
+                    "dependencies": ["users.insert"],
+                    "condition": "member.supervisor_info?.subleader != null",
+                    "error_message": "サブリーダー情報の登録に失敗しました。"
+                },
+                {
+                    "step": "user_roles.insert_leader",
+                    "required": false,
+                    "dependencies": ["users.insert"],
+                    "condition": "member.roles?.is_leader === true",
+                    "error_message": "リーダー権限の登録に失敗しました。"
+                },
+                {
+                    "step": "user_roles.insert_admin",
+                    "required": false,
+                    "dependencies": ["users.insert"],
+                    "condition": "member.roles?.is_admin === true",
+                    "error_message": "管理者権限の登録に失敗しました。"
+                }
+            ],
+            "on_failure": {
+                "action": "rollback",
+                "error_handling": {
+                    "auth_users": {
+                        "cleanup": "DELETE FROM auth.users WHERE id = auth_user_id"
+                    },
+                    "users": {
+                        "cleanup": "DELETE FROM public.users WHERE id = user_id"
+                    }
+                },
+                "error_details": {
+                    "log_level": "error",
+                    "include_context": true
                 }
             }
         },

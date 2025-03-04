@@ -8,5 +8,8 @@
     "tailwindCSS.includeLanguages": {
         "typescript": "javascript",
         "typescriptreact": "javascript"
-    }
+    },
+    "eslint.enable": false,
+    "eslint.quiet": true,
+    "eslint.run": "never"
 }
