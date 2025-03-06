@@ -292,7 +292,7 @@ export default function MembersPage() {
       if (timer) clearTimeout(timer);
       
       timer = setTimeout(() => {
-        setMessage(null)
+        setMessageWithStability(null)
       }, 3000)
     }
     
@@ -362,6 +362,18 @@ export default function MembersPage() {
     }
   }
 
+  // メッセージ設定用のラッパー関数を追加
+  const setMessageWithStability = (newMessage: Message | null) => {
+    // 現在のメッセージと同じタイプで同じテキストの場合は更新しない
+    if (newMessage && message && 
+        newMessage.type === message.type && 
+        newMessage.text === message.text) {
+      return;
+    }
+    
+    setMessage(newMessage);
+  }
+  
   // 検索処理の実装
   const handleSearch = async (showMessage: boolean = true) => {
     setIsLoading(true)
@@ -415,7 +427,7 @@ export default function MembersPage() {
 
       if (usersError) {
         console.error('Error searching members:', usersError)
-        setMessage({
+        setMessageWithStability({
           type: 'error',
           text: 'メンバー情報の検索に失敗しました',
           dismissible: true,
@@ -473,26 +485,25 @@ export default function MembersPage() {
       setMembers(sortedUsers || [])
       setOriginalMembers(sortedUsers || [])
 
-      // 検索時のメッセージ表示を条件付きに変更
-      if (showMessage && !hasSearched) {
+      // 検索時のメッセージ表示を修正 - 常に検索結果のメッセージを表示する
+      if (showMessage) {
         if (formattedUsers.length === 0) {
-          setMessage({
+          setMessageWithStability({
             type: 'info',
             text: '該当するメンバーが見つかりませんでした'
           })
         } else {
-          setMessage({
+          setMessageWithStability({
             type: 'success',
             text: `${formattedUsers.length}件のメンバーが見つかりました`
           })
         }
-        setHasSearched(true)
       }
 
     } catch (error) {
       console.error('Error searching members:', error)
       if (showMessage) {
-        setMessage({
+        setMessageWithStability({
           type: 'error',
           text: 'メンバー情報の検索に失敗しました',
           dismissible: true,
@@ -1095,7 +1106,7 @@ export default function MembersPage() {
       await handleSearch(false)
       
       // 保存成功メッセージを表示（検索後に表示することで重複を防ぐ）
-      setMessage({
+      setMessageWithStability({
         type: 'success',
         text: result.message || t('update-success'),
         persistent: false
@@ -1107,7 +1118,7 @@ export default function MembersPage() {
         message: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined
       });
-      setMessage({
+      setMessageWithStability({
         type: 'error',
         text: error instanceof Error ? error.message : t('update-error'),
         details: error instanceof Error ? error.cause : undefined,
@@ -1394,12 +1405,12 @@ export default function MembersPage() {
                   </div>
                   <span className="text-sm font-medium whitespace-pre-line">{formattedMessage}</span>
                 </div>
-                  <button
-                    onClick={() => setMessage(null)}
-                    className="p-1 hover:bg-gray-100 rounded-full"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
+                <button
+                  onClick={handleCloseMessage}
+                  className="p-1 hover:bg-gray-100 rounded-full"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </motion.div>
             )}
           </AnimatePresence>
@@ -1427,6 +1438,14 @@ export default function MembersPage() {
             >
               {icons[message.type]}
               <span className="text-sm font-medium whitespace-pre-line">{formattedMessage}</span>
+              {message.dismissible && (
+                <button
+                  onClick={handleCloseMessage}
+                  className="p-1 hover:bg-gray-100 rounded-full ml-2"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
@@ -1642,6 +1661,11 @@ export default function MembersPage() {
       return member
     }))
   }
+
+  // メッセージを閉じる処理
+  const handleCloseMessage = () => {
+    setMessageWithStability(null);
+  };
 
   return (
     <div className="space-y-6 relative z-[1]">
