@@ -1089,15 +1089,17 @@ export default function MembersPage() {
       // 4. 成功時の処理
       console.log('Save successful, cleaning up...');
       setEditingMembers([])
+      
+      // 5. 検索条件をリセットして再検索（メッセージを表示せずに）
+      setHasSearched(false)
+      await handleSearch(false)
+      
+      // 保存成功メッセージを表示（検索後に表示することで重複を防ぐ）
       setMessage({
         type: 'success',
         text: result.message || t('update-success'),
         persistent: false
       })
-
-      // 5. 検索条件をリセットして再検索
-      setHasSearched(false)
-      await handleSearch(false)
 
     } catch (error) {
       console.error('Error in save process:', {
