@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Clock, Save, AlertCircle, CheckCircle2, Info, X } from "lucide-react"
+import { Clock, Save, AlertCircle, CheckCircle2, Info, X, CheckSquare, Edit } from "lucide-react"
 import { useI18n } from "@/lib/i18n/context"
 import { supabase } from '@/lib/supabaseClient'
 import { AnimatePresence, motion } from "framer-motion"
@@ -124,7 +124,7 @@ interface Message {
   text: string
   details?: any  // エラーの詳細情報
   persistent?: boolean  // フェードアウトしないフラグ
-  position?: 'top' | 'bottom'  // 表示位置
+  position?: 'top' | 'bottom' | 'center'  // 表示位置
   alignment?: 'left' | 'center'  // 文字寄せ
   dismissible?: boolean  // 手動で消せるフラグ
 }
@@ -148,6 +148,7 @@ export default function AttendancePage() {
     }
   }>({})
   const [branchInfo, setBranchInfo] = useState<{ name: string; code: string } | null>(null)
+  const [status, setStatus] = useState<string>("00")
 
   const monthStart = startOfMonth(currentDate)
   const monthEnd = endOfMonth(currentDate)
@@ -278,6 +279,8 @@ export default function AttendancePage() {
       if (headerData) {
         // 勤務場所を設定
         setWorkplace(headerData.workplace || '')
+        // ステータスを設定
+        setStatus(headerData.status || '00')
 
         // 2. 勤怠詳細を取得
         const { data: detailsData, error: detailsError } = await supabase
@@ -344,7 +347,12 @@ export default function AttendancePage() {
         // セッションストレージの値を使用して勤務場所を初期化
         const storedWorkplace = sessionStorage.getItem('workplace')
         setWorkplace(storedWorkplace || '')
+        // ステータスを初期化
+        setStatus('00')
       }
+      
+      // 検索完了時にメッセージをクリア
+      setMessageWithStability(null)
     } catch (error) {
       console.error('Error fetching attendance data:', error)
       setMessageWithStability({ type: 'error', text: '勤怠データの取得に失敗しました' })
@@ -380,6 +388,13 @@ export default function AttendancePage() {
     const newDate = new Date(currentDate)
     newDate.setFullYear(parseInt(year))
     setCurrentDate(newDate)
+    setMessageWithStability({ 
+      type: 'info', 
+      text: '勤怠データを検索中です...',
+      position: 'center',
+      alignment: 'center',
+      persistent: true
+    });
     fetchAttendanceData(parseInt(year), newDate.getMonth() + 1)
   }
 
@@ -388,6 +403,13 @@ export default function AttendancePage() {
     const newDate = new Date(currentDate)
     newDate.setMonth(parseInt(month) - 1)
     setCurrentDate(newDate)
+    setMessageWithStability({ 
+      type: 'info', 
+      text: '勤怠データを検索中です...',
+      position: 'center',
+      alignment: 'center',
+      persistent: true
+    });
     fetchAttendanceData(newDate.getFullYear(), parseInt(month))
   }
 
@@ -426,66 +448,141 @@ export default function AttendancePage() {
     setMessageWithStability(null);
   }
 
-  // 勤怠データを保存する関数
-  const handleSave = async () => {
-    if (!userInfo?.id || !branchInfo?.code) {
-      console.error('保存エラー: ユーザー情報または所属情報が不足しています', { userInfo, branchInfo });
+  // ステータスを次に進める関数
+  const moveToNextStatus = () => {
+    // 現在のステータスに応じて次のステータスを設定
+    switch (status) {
+      case '00': // 下書きから申請中へ
+        setStatus('10');
+        break;
+      case '30': // 差戻しから申請中へ
+        setStatus('10');
+        break;
+      default:
+        // その他のステータスは変更しない
+        break;
+    }
+  }
+
+  // ステータスを下書きに戻す関数
+  const moveToEditStatus = () => {
+    setStatus('00');
+    setMessageWithStability({ 
+      type: 'success', 
+      text: '再編集モードに変更しました',
+      position: 'bottom'
+    });
+  }
+
+  // 編集可能かどうかを判定する関数
+  const isEditable = () => {
+    return status === '00' || status === '30';
+  }
+
+  // チェック処理を行う関数
+  const handleCheck = async () => {
+    if (!userInfo?.id) {
       setMessageWithStability({ 
         type: 'error', 
-        text: 'ユーザー情報または所属情報が取得できません。再ログインしてください。',
+        text: 'ユーザー情報が取得できません。再ログインしてください。',
         persistent: true
       });
       return;
     }
 
-    // バリデーションエラーメッセージを格納する配列
-    const validationErrors: string[] = [];
-
-    // 入力データのバリデーションチェック
-    Object.entries(attendanceData).forEach(([date, data]) => {
-      const { startTime, endTime } = data;
-      const dateDisplay = format(new Date(date), 'M/d');
-
-      // 時刻形式のバリデーション（HH:MM形式かどうか）
-      const timePattern = /^([0-1][0-9]|2[0-3]):([0-5][0-9])$/;
-      
-      // 開始時間のチェック
-      if (startTime && !timePattern.test(startTime)) {
-        validationErrors.push(`${dateDisplay}の開始時間「${startTime}」が正しい形式（HH:MM）ではありません。`);
-      }
-      
-      // 終了時間のチェック
-      if (endTime && !timePattern.test(endTime)) {
-        validationErrors.push(`${dateDisplay}の終了時間「${endTime}」が正しい形式（HH:MM）ではありません。`);
-      }
-      
-      // 開始時間と終了時間の逆転チェック
-      if (startTime && endTime && timePattern.test(startTime) && timePattern.test(endTime)) {
-        const start = parse(startTime, 'HH:mm', new Date());
-        const end = parse(endTime, 'HH:mm', new Date());
-        
-        if (end < start) {
-          validationErrors.push(`${dateDisplay}の終了時間（${endTime}）が開始時間（${startTime}）より前になっています。`);
-        }
+    const errors: string[] = [];
+    const weekdays: string[] = [];
+    
+    // 平日の日付を収集
+    days.forEach(day => {
+      // 土日以外を平日とする
+      if (![0, 6].includes(day.getDay())) {
+        weekdays.push(format(day, 'yyyy-MM-dd'));
       }
     });
 
-    // バリデーションエラーがある場合は処理を中断
-    if (validationErrors.length > 0) {
-      // エラーメッセージを表示
+    // 各日付の入力チェック
+    Object.entries(attendanceData).forEach(([date, data]) => {
+      const { startTime, endTime, breakTime, remarks, type, lateEarlyHours } = data;
+      const dateDisplay = format(new Date(date), 'M/d');
+      
+      // 1. 開始時間、終了時間、休憩時間、備考のいずれか１つ以上が入力されていて且つ４つの項目がすべて入力されていない場合
+      const hasAnyInput = startTime || endTime || breakTime || remarks;
+      const hasAllInputs = startTime && endTime && breakTime && remarks;
+      
+      if (hasAnyInput && !hasAllInputs) {
+        errors.push(`${dateDisplay}の開始時間、終了時間、休憩時間、備考は必須入力です`);
+      }
+      
+      // 2. 勤怠区分または遅刻・早退時間が入力されていて開始時間、終了時間、休憩時間、備考に１つでも未入力があった場合
+      const hasTypeOrLateEarly = (type && type !== 'none') || lateEarlyHours;
+      
+      if (hasTypeOrLateEarly && !hasAllInputs) {
+        errors.push(`${dateDisplay}の開始時間、終了時間、休憩時間、備考は必須入力です`);
+      }
+      
+      // 入力がある日付を平日リストから削除
+      if (hasAnyInput) {
+        const index = weekdays.indexOf(date);
+        if (index !== -1) {
+          weekdays.splice(index, 1);
+        }
+      }
+    });
+    
+    // 3. 平日なのにも関わらず入力欄が１つも入力されていない日付があるかチェック
+    weekdays.forEach(date => {
+      const dateDisplay = format(new Date(date), 'M/d');
+      errors.push(`${dateDisplay}の勤務実績が入力されていません。`);
+    });
+    
+    // エラーがある場合はメッセージを表示
+    if (errors.length > 0) {
       setMessageWithStability({ 
         type: 'error', 
-        text: `以下のエラーを修正してください：\n${validationErrors.join('\n')}`,
+        text: errors.join('\n'),
         persistent: true,
         position: 'top'
       });
       return;
     }
+    
+    // すべてのチェックに問題がなかった場合はステータスを次に進める
+    // 明示的に '10' に設定
+    setStatus('10');
+    
+    // 保存処理を実行
+    try {
+      await handleSaveData();
+      
+      // 成功メッセージを表示
+      setMessageWithStability({ 
+        type: 'success', 
+        text: 'チェックが完了し、データを保存しました。ステータスを更新しました。',
+        position: 'bottom'
+      });
+    } catch (error) {
+      console.error('保存処理でエラーが発生しました:', error);
+      setMessageWithStability({ 
+        type: 'error', 
+        text: error instanceof Error ? error.message : '勤怠データの保存に失敗しました',
+        persistent: true,
+        position: 'top'
+      });
+    }
+  }
+
+  // 保存処理のロジックを分離
+  const handleSaveData = async () => {
+    if (!userInfo?.id || !branchInfo?.code) {
+      console.error('保存エラー: ユーザー情報または所属情報が不足しています', { userInfo, branchInfo });
+      throw new Error('ユーザー情報または所属情報が取得できません。再ログインしてください。');
+    }
+
+    setIsLoading(true);
+    setMessageWithStability(null);
 
     try {
-      setIsLoading(true);
-      setMessageWithStability(null);
-
       const year = currentDate.getFullYear();
       const month = currentDate.getMonth() + 1;
 
@@ -494,7 +591,8 @@ export default function AttendancePage() {
         month, 
         userId: userInfo.id,
         employeeId: userInfo.employee_id,
-        branchCode: branchInfo.code
+        branchCode: branchInfo.code,
+        status: status // ステータスをログに出力
       });
 
       // 1. 勤怠ヘッダーを作成または更新
@@ -519,7 +617,7 @@ export default function AttendancePage() {
         year,
         month,
         workplace,
-        status: '00', // ドラフト保存
+        status: status, // 現在のステータスを使用
         total_working_days: summary.totalWorkDays,
         holiday_working_days: summary.holidayWorkDays,
         absence_days: summary.absenceDays,
@@ -663,6 +761,70 @@ export default function AttendancePage() {
       }
 
       console.log('詳細データの保存に成功しました');
+      return true;
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  // 勤怠データを保存する関数
+  const handleSave = async () => {
+    if (!userInfo?.id || !branchInfo?.code) {
+      console.error('保存エラー: ユーザー情報または所属情報が不足しています', { userInfo, branchInfo });
+      setMessageWithStability({ 
+        type: 'error', 
+        text: 'ユーザー情報または所属情報が取得できません。再ログインしてください。',
+        persistent: true
+      });
+      return;
+    }
+
+    // バリデーションエラーメッセージを格納する配列
+    const validationErrors: string[] = [];
+
+    // 入力データのバリデーションチェック
+    Object.entries(attendanceData).forEach(([date, data]) => {
+      const { startTime, endTime } = data;
+      const dateDisplay = format(new Date(date), 'M/d');
+
+      // 時刻形式のバリデーション（HH:MM形式かどうか）
+      const timePattern = /^([0-1][0-9]|2[0-3]):([0-5][0-9])$/;
+      
+      // 開始時間のチェック
+      if (startTime && !timePattern.test(startTime)) {
+        validationErrors.push(`${dateDisplay}の開始時間「${startTime}」が正しい形式（HH:MM）ではありません。`);
+      }
+      
+      // 終了時間のチェック
+      if (endTime && !timePattern.test(endTime)) {
+        validationErrors.push(`${dateDisplay}の終了時間「${endTime}」が正しい形式（HH:MM）ではありません。`);
+      }
+      
+      // 開始時間と終了時間の逆転チェック
+      if (startTime && endTime && timePattern.test(startTime) && timePattern.test(endTime)) {
+        const start = parse(startTime, 'HH:mm', new Date());
+        const end = parse(endTime, 'HH:mm', new Date());
+        
+        if (end < start) {
+          validationErrors.push(`${dateDisplay}の終了時間（${endTime}）が開始時間（${startTime}）より前になっています。`);
+        }
+      }
+    });
+
+    // バリデーションエラーがある場合は処理を中断
+    if (validationErrors.length > 0) {
+      // エラーメッセージを表示
+      setMessageWithStability({ 
+        type: 'error', 
+        text: `以下のエラーを修正してください：\n${validationErrors.join('\n')}`,
+        persistent: true,
+        position: 'top'
+      });
+      return;
+    }
+
+    try {
+      await handleSaveData();
       setMessageWithStability({ 
         type: 'success', 
         text: '勤怠データを保存しました',
@@ -670,6 +832,8 @@ export default function AttendancePage() {
       });
       
       // 保存後にデータを再取得
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth() + 1;
       await fetchAttendanceData(year, month);
     } catch (error) {
       console.error('保存処理でエラーが発生しました:', error);
@@ -679,8 +843,18 @@ export default function AttendancePage() {
         persistent: true,
         position: 'top'
       });
-    } finally {
-      setIsLoading(false);
+    }
+  }
+
+  // ステータス名を取得する関数
+  const getStatusName = (statusCode: string): string => {
+    switch (statusCode) {
+      case '00': return '下書き';
+      case '10': return '申請中';
+      case '20': return '承認済';
+      case '30': return '差戻し';
+      case '40': return '却下';
+      default: return '下書き';
     }
   }
 
@@ -707,6 +881,32 @@ export default function AttendancePage() {
         {index < message.text.split('\n').length - 1 && <br />}
       </React.Fragment>
     ));
+
+    // 中央配置のモーダルメッセージ（検索中表示用）
+    if (message.position === 'center') {
+      return (
+        <div className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-50">
+          <div className={`
+            rounded-lg border p-6 
+            shadow-lg max-w-md w-full
+            ${styles[message.type]}
+          `}>
+            <div className="flex flex-col items-center gap-4 text-center">
+              <div className="flex items-center justify-center w-12 h-12 rounded-full bg-blue-100">
+                {message.type === 'info' && (
+                  <svg className="animate-spin h-6 w-6 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                )}
+                {message.type !== 'info' && icons[message.type]}
+              </div>
+              <span className="text-lg font-medium whitespace-pre-line">{formattedMessage}</span>
+            </div>
+          </div>
+        </div>
+      )
+    }
 
     // エラーとワーニングは上部に表示
     if (message.type === 'error')
@@ -837,6 +1037,20 @@ export default function AttendancePage() {
                         ))}
                       </SelectContent>
                     </Select>
+                    
+                    {isEditable() ? (
+                      <Input
+                        value={workplace}
+                        onChange={(e) => setWorkplace(e.target.value)}
+                        className="w-64 border-[#d1d5db] border-opacity-85"
+                        placeholder={t("enter-workplace")}
+                      />
+                    ) : (
+                      <div className="w-64">
+                        <div className="text-sm text-muted-foreground">勤務場所</div>
+                        <div className="font-medium">{workplace || t("enter-workplace")}</div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-8">
@@ -856,35 +1070,58 @@ export default function AttendancePage() {
                           : userInfo?.last_name || userInfo?.first_name || ''}
                       </div>
                     </div>
-                    <Input
-                      value={workplace}
-                      onChange={(e) => setWorkplace(e.target.value)}
-                      className="w-64"
-                      placeholder={t("enter-workplace")}
-                    />
+                    <div>
+                      <div className="text-sm text-muted-foreground">ステータス</div>
+                      <div className="font-medium">
+                        {getStatusName(status)}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                <Button 
-                  onClick={handleSave} 
-                  className="bg-blue-600 hover:bg-blue-700"
-                  disabled={isLoading}
-                >
-                  {isLoading ? (
-                    <span className="flex items-center">
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      保存中...
-                    </span>
-                  ) : (
+                <div className="flex items-center gap-2">
+                  {isEditable() ? (
                     <>
-                  <Save className="h-4 w-4 mr-2" />
-                  {t("save")}
+                      <Button 
+                        onClick={handleCheck} 
+                        className="bg-green-600 hover:bg-green-700"
+                        disabled={isLoading}
+                      >
+                        <CheckSquare className="h-4 w-4 mr-2" />
+                        チェック
+                      </Button>
+                      <Button 
+                        onClick={handleSave} 
+                        className="bg-blue-600 hover:bg-blue-700"
+                        disabled={isLoading}
+                      >
+                        {isLoading ? (
+                          <span className="flex items-center">
+                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            保存中...
+                          </span>
+                        ) : (
+                          <>
+                          <Save className="h-4 w-4 mr-2" />
+                          {t("save")}
+                          </>
+                        )}
+                      </Button>
                     </>
+                  ) : (
+                    <Button 
+                      onClick={moveToEditStatus} 
+                      className="bg-amber-600 hover:bg-amber-700"
+                      disabled={isLoading}
+                    >
+                      <Edit className="h-4 w-4 mr-2" />
+                      再編集
+                    </Button>
                   )}
-                </Button>
+                </div>
               </div>
 
               <div className="grid grid-cols-7 gap-x-4 mb-6">
@@ -919,7 +1156,7 @@ export default function AttendancePage() {
               </div>
 
               <div className="border rounded-lg border-gray-300 shadow-sm">
-                <div className="grid grid-cols-12 gap-2 p-2 bg-white dark:bg-gray-800 rounded-t-lg text-sm border-b border-gray-300">
+                <div className="grid grid-cols-12 gap-2 p-2 bg-blue-50 dark:bg-gray-800 rounded-t-lg text-sm border-b border-gray-300">
                   <div className="col-span-1 text-gray-500 font-medium">{t("date")}</div>
                   <div className="col-span-1 text-gray-500 font-medium">{t("start-time")}</div>
                   <div className="col-span-1 text-gray-500 font-medium">{t("end-time")}</div>
@@ -955,37 +1192,55 @@ export default function AttendancePage() {
                           {format(day, 'M/d')}({dayOfWeek})
                         </div>
                         <div className="col-span-1">
-                          <Input
-                            type="text"
-                            inputMode="numeric"
-                            placeholder="HH:MM"
-                            value={attendanceData[dateKey]?.startTime || ""}
-                            onChange={(e) => handleTimeChange(day, 'startTime', e.target.value)}
-                            onBlur={() => handleTimeBlur(day)}
-                            className="h-8 text-center placeholder:text-gray-300 border-[#d1d5db] border-opacity-85"
-                          />
+                          {isEditable() ? (
+                            <Input
+                              type="text"
+                              inputMode="numeric"
+                              placeholder="HH:MM"
+                              value={attendanceData[dateKey]?.startTime || ""}
+                              onChange={(e) => handleTimeChange(day, 'startTime', e.target.value)}
+                              onBlur={() => handleTimeBlur(day)}
+                              className="h-8 text-center placeholder:text-gray-300 border-[#d1d5db] border-opacity-85"
+                            />
+                          ) : (
+                            <div className="h-8 flex items-center justify-center font-medium">
+                              {attendanceData[dateKey]?.startTime || ""}
+                            </div>
+                          )}
                         </div>
                         <div className="col-span-1">
-                          <Input
-                            type="text"
-                            inputMode="numeric"
-                            placeholder="HH:MM"
-                            value={attendanceData[dateKey]?.endTime || ""}
-                            onChange={(e) => handleTimeChange(day, 'endTime', e.target.value)}
-                            onBlur={() => handleTimeBlur(day)}
-                            className="h-8 text-center placeholder:text-gray-300 border-[#d1d5db] border-opacity-85"
-                          />
+                          {isEditable() ? (
+                            <Input
+                              type="text"
+                              inputMode="numeric"
+                              placeholder="HH:MM"
+                              value={attendanceData[dateKey]?.endTime || ""}
+                              onChange={(e) => handleTimeChange(day, 'endTime', e.target.value)}
+                              onBlur={() => handleTimeBlur(day)}
+                              className="h-8 text-center placeholder:text-gray-300 border-[#d1d5db] border-opacity-85"
+                            />
+                          ) : (
+                            <div className="h-8 flex items-center justify-center font-medium">
+                              {attendanceData[dateKey]?.endTime || ""}
+                            </div>
+                          )}
                         </div>
                         <div className="col-span-1">
-                          <Input
-                            type="text"
-                            inputMode="numeric"
-                            placeholder="HH:MM"
-                            value={attendanceData[dateKey]?.breakTime || ""}
-                            onChange={(e) => handleTimeChange(day, 'breakTime', e.target.value)}
-                            onBlur={() => handleTimeBlur(day)}
-                            className="h-8 text-center placeholder:text-gray-300 border-[#d1d5db] border-opacity-85"
-                          />
+                          {isEditable() ? (
+                            <Input
+                              type="text"
+                              inputMode="numeric"
+                              placeholder="HH:MM"
+                              value={attendanceData[dateKey]?.breakTime || ""}
+                              onChange={(e) => handleTimeChange(day, 'breakTime', e.target.value)}
+                              onBlur={() => handleTimeBlur(day)}
+                              className="h-8 text-center placeholder:text-gray-300 border-[#d1d5db] border-opacity-85"
+                            />
+                          ) : (
+                            <div className="h-8 flex items-center justify-center font-medium">
+                              {attendanceData[dateKey]?.breakTime || ""}
+                            </div>
+                          )}
                         </div>
                         <div className="col-span-1">
                           <div className="h-8 flex items-center justify-center font-medium">
@@ -993,49 +1248,84 @@ export default function AttendancePage() {
                           </div>
                         </div>
                         <div className="col-span-2">
-                          <Select
-                            onValueChange={(value) => handleTimeChange(day, 'type', value)}
-                            value={attendanceData[dateKey]?.type || "none"}
-                          >
-                            <SelectTrigger className="h-8 border-[#d1d5db] border-opacity-85">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none" className="h-8"></SelectItem>
-                              <SelectItem value="holiday-work" className="h-8">休出</SelectItem>
-                              <SelectItem value="paid-leave" className="h-8">有休</SelectItem>
-                              <SelectItem value="am-leave" className="h-8">前休</SelectItem>
-                              <SelectItem value="pm-leave" className="h-8">後休</SelectItem>
-                              <SelectItem value="special-leave" className="h-8">特休</SelectItem>
-                              <SelectItem value="compensatory-leave" className="h-8">振休</SelectItem>
-                              <SelectItem value="compensatory-leave-planned" className="h-8">振予</SelectItem>
-                              <SelectItem value="absence" className="h-8">欠勤</SelectItem>
-                              <SelectItem value="late" className="h-8">遅刻</SelectItem>
-                              <SelectItem value="early-leave" className="h-8">早退</SelectItem>
-                              <SelectItem value="delay" className="h-8">遅延</SelectItem>
-                              <SelectItem value="shift" className="h-8">シフト</SelectItem>
-                              <SelectItem value="business-holiday" className="h-8">休業</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          {isEditable() ? (
+                            <Select
+                              onValueChange={(value) => handleTimeChange(day, 'type', value)}
+                              value={attendanceData[dateKey]?.type || "none"}
+                            >
+                              <SelectTrigger className="h-8 border-[#d1d5db] border-opacity-85">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none" className="h-8"></SelectItem>
+                                <SelectItem value="holiday-work" className="h-8">休出</SelectItem>
+                                <SelectItem value="paid-leave" className="h-8">有休</SelectItem>
+                                <SelectItem value="am-leave" className="h-8">前休</SelectItem>
+                                <SelectItem value="pm-leave" className="h-8">後休</SelectItem>
+                                <SelectItem value="special-leave" className="h-8">特休</SelectItem>
+                                <SelectItem value="compensatory-leave" className="h-8">振休</SelectItem>
+                                <SelectItem value="compensatory-leave-planned" className="h-8">振予</SelectItem>
+                                <SelectItem value="absence" className="h-8">欠勤</SelectItem>
+                                <SelectItem value="late" className="h-8">遅刻</SelectItem>
+                                <SelectItem value="early-leave" className="h-8">早退</SelectItem>
+                                <SelectItem value="delay" className="h-8">遅延</SelectItem>
+                                <SelectItem value="shift" className="h-8">シフト</SelectItem>
+                                <SelectItem value="business-holiday" className="h-8">休業</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <div className="h-8 flex items-center px-3 font-medium">
+                              {(() => {
+                                switch (attendanceData[dateKey]?.type) {
+                                  case 'holiday-work': return '休出';
+                                  case 'paid-leave': return '有休';
+                                  case 'am-leave': return '前休';
+                                  case 'pm-leave': return '後休';
+                                  case 'special-leave': return '特休';
+                                  case 'compensatory-leave': return '振休';
+                                  case 'compensatory-leave-planned': return '振予';
+                                  case 'absence': return '欠勤';
+                                  case 'late': return '遅刻';
+                                  case 'early-leave': return '早退';
+                                  case 'delay': return '遅延';
+                                  case 'shift': return 'シフト';
+                                  case 'business-holiday': return '休業';
+                                  default: return '';
+                                }
+                              })()}
+                            </div>
+                          )}
                         </div>
                         <div className="col-span-4">
-                          <Input
-                            type="text"
-                            value={attendanceData[dateKey]?.remarks || ""}
-                            onChange={(e) => handleTimeChange(day, 'remarks', e.target.value)}
-                            className="h-8 placeholder:text-gray-300 border-[#d1d5db] border-opacity-85"
-                            placeholder={t("remarks-placeholder")}
-                          />
+                          {isEditable() ? (
+                            <Input
+                              type="text"
+                              value={attendanceData[dateKey]?.remarks || ""}
+                              onChange={(e) => handleTimeChange(day, 'remarks', e.target.value)}
+                              className="h-8 placeholder:text-gray-300 border-[#d1d5db] border-opacity-85"
+                              placeholder={t("remarks-placeholder")}
+                            />
+                          ) : (
+                            <div className="h-8 flex items-center px-3 font-medium">
+                              {attendanceData[dateKey]?.remarks || ""}
+                            </div>
+                          )}
                         </div>
                         <div className="col-span-1">
-                          <Input
-                            type="text"
-                            inputMode="numeric"
-                            placeholder="0.0"
-                            value={attendanceData[dateKey]?.lateEarlyHours || ""}
-                            onChange={(e) => handleTimeChange(day, 'lateEarlyHours', e.target.value)}
-                            className="h-8 text-center placeholder:text-gray-300 border-[#d1d5db] border-opacity-85"
-                          />
+                          {isEditable() ? (
+                            <Input
+                              type="text"
+                              inputMode="numeric"
+                              placeholder="0.0"
+                              value={attendanceData[dateKey]?.lateEarlyHours || ""}
+                              onChange={(e) => handleTimeChange(day, 'lateEarlyHours', e.target.value)}
+                              className="h-8 text-center placeholder:text-gray-300 border-[#d1d5db] border-opacity-85"
+                            />
+                          ) : (
+                            <div className="h-8 flex items-center justify-center font-medium">
+                              {attendanceData[dateKey]?.lateEarlyHours || ""}
+                            </div>
+                          )}
                         </div>
                       </div>
                     )
