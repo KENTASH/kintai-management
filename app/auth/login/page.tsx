@@ -96,12 +96,13 @@ export default function LoginPage() {
 
       // 4. ユーザープロファイルを作成
       const userProfile = {
+        id: userData.id,
         employee_id: userData.employee_id,
         last_name: userData.last_name,
         first_name: userData.first_name,
         last_name_en: userData.last_name_en,
         first_name_en: userData.first_name_en,
-        branch_name: branchData.code,
+        branch_code: branchData.code,
         branch_name_jp: branchData.name_jp,
         branch_name_en: branchData.name_en,
         avatar_url: null,

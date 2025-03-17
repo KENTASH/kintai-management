@@ -3,7 +3,7 @@ export const translations = {
     // 既存の翻訳
     "name": "名前",
     "employee-id": "社員番号",
-    "department": "部署",
+    "department": "所属",
     "last-name": "姓",
     "first-name": "名",
     "last-name-en": "姓（英語）",
@@ -151,7 +151,7 @@ export const translations = {
     "app-title": "勤怠管理システム",
     "admin-menu": "管理メニュー",
     "avatar-settings": "アイコン設定",
-    "branch-label": "部署",
+    "branch-label": "所属",
     "employee-id-label": "社員番号",
     "logout": "ログアウト",
     "name-label": "名前",

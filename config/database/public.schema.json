@@ -247,6 +247,198 @@
               }
           },
           "foreign_keys": {}
+      },
+      "attendance_headers": {
+          "description": "勤怠データのヘッダー情報を管理するテーブル",
+          "columns": {
+              "id": {
+                  "type": "uuid",
+                  "primary_key": true,
+                  "not_null": true,
+                  "default": "uuid_generate_v4()"
+              },
+              "user_id": {
+                  "type": "uuid",
+                  "not_null": true,
+                  "foreign_key": "users.id"
+              },
+              "employee_id": {
+                  "type": "varchar(20)",
+                  "not_null": true
+              },
+              "branch_id": {
+                  "type": "varchar(10)",
+                  "not_null": true,
+                  "foreign_key": "branch_master.code"
+              },
+              "year": {
+                  "type": "integer",
+                  "not_null": true
+              },
+              "month": {
+                  "type": "integer",
+                  "not_null": true
+              },
+              "workplace": {
+                  "type": "varchar(100)",
+                  "not_null": false
+              },
+              "status": {
+                  "type": "varchar(2)",
+                  "not_null": true,
+                  "default": "'00'",
+                  "description": "00: 下書き, 01: 申請中, 02: 承認済, 03: 差戻し"
+              },
+              "total_working_days": {
+                  "type": "integer",
+                  "not_null": false
+              },
+              "holiday_working_days": {
+                  "type": "integer",
+                  "not_null": false
+              },
+              "absence_days": {
+                  "type": "integer",
+                  "not_null": false
+              },
+              "total_working_hours": {
+                  "type": "decimal(5,2)",
+                  "not_null": false
+              },
+              "late_early_hours": {
+                  "type": "decimal(4,2)",
+                  "not_null": false
+              },
+              "paid_leave_days": {
+                  "type": "decimal(4,1)",
+                  "not_null": false
+              },
+              "created_at": {
+                  "type": "timestamp",
+                  "not_null": true,
+                  "default": "CURRENT_TIMESTAMP"
+              },
+              "updated_at": {
+                  "type": "timestamp",
+                  "not_null": true,
+                  "default": "CURRENT_TIMESTAMP",
+                  "on_update": "CURRENT_TIMESTAMP"
+              },
+              "created_by": {
+                  "type": "uuid",
+                  "not_null": true,
+                  "foreign_key": "users.id"
+              },
+              "updated_by": {
+                  "type": "uuid",
+                  "not_null": true,
+                  "foreign_key": "users.id"
+              }
+          },
+          "foreign_keys": {
+              "user_id": {
+                  "references": "users",
+                  "column": "id"
+              },
+              "branch_id": {
+                  "references": "branch_master",
+                  "column": "code"
+              },
+              "created_by": {
+                  "references": "users",
+                  "column": "id"
+              },
+              "updated_by": {
+                  "references": "users",
+                  "column": "id"
+              }
+          }
+      },
+      "attendance_details": {
+          "description": "勤怠データの詳細情報を管理するテーブル",
+          "columns": {
+              "id": {
+                  "type": "uuid",
+                  "primary_key": true,
+                  "not_null": true,
+                  "default": "uuid_generate_v4()"
+              },
+              "header_id": {
+                  "type": "uuid",
+                  "not_null": true,
+                  "foreign_key": "attendance_headers.id"
+              },
+              "date": {
+                  "type": "date",
+                  "not_null": true
+              },
+              "start_time": {
+                  "type": "time",
+                  "not_null": false
+              },
+              "end_time": {
+                  "type": "time",
+                  "not_null": false
+              },
+              "break_time": {
+                  "type": "integer",
+                  "not_null": false,
+                  "description": "休憩時間（分）"
+              },
+              "actual_working_hours": {
+                  "type": "decimal(4,2)",
+                  "not_null": false
+              },
+              "work_type_code": {
+                  "type": "varchar(2)",
+                  "not_null": true,
+                  "default": "'01'",
+                  "description": "01: 通常勤務, 02: 休日出勤, 03: 有給休暇, 04: 午前休, 05: 午後休, 06: 特別休暇, 07: 代休, 08: 代休予定, 09: 欠勤, 10: 遅刻, 11: 早退, 12: 遅延, 13: シフト, 14: 業務休"
+              },
+              "late_early_hours": {
+                  "type": "decimal(4,2)",
+                  "not_null": false
+              },
+              "remarks": {
+                  "type": "text",
+                  "not_null": false
+              },
+              "created_at": {
+                  "type": "timestamp",
+                  "not_null": true,
+                  "default": "CURRENT_TIMESTAMP"
+              },
+              "updated_at": {
+                  "type": "timestamp",
+                  "not_null": true,
+                  "default": "CURRENT_TIMESTAMP",
+                  "on_update": "CURRENT_TIMESTAMP"
+              },
+              "created_by": {
+                  "type": "uuid",
+                  "not_null": true,
+                  "foreign_key": "users.id"
+              },
+              "updated_by": {
+                  "type": "uuid",
+                  "not_null": true,
+                  "foreign_key": "users.id"
+              }
+          },
+          "foreign_keys": {
+              "header_id": {
+                  "references": "attendance_headers",
+                  "column": "id"
+              },
+              "created_by": {
+                  "references": "users",
+                  "column": "id"
+              },
+              "updated_by": {
+                  "references": "users",
+                  "column": "id"
+              }
+          }
       }
   }
 }
