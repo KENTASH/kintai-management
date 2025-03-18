@@ -82,6 +82,7 @@ const calculateActualTime = (startTime: string, endTime: string, breakTime: stri
     const minutes = totalMinutes % 60
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`
   } catch (error) {
+    console.error("実働時間計算エラー:", error)
     return ""
   }
 }
@@ -134,6 +135,7 @@ export default function AttendancePage() {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [workplace, setWorkplace] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
   const [message, setMessage] = useState<Message | null>(null)
   const [attendanceData, setAttendanceData] = useState<{
@@ -159,7 +161,9 @@ export default function AttendancePage() {
     const entries = Object.entries(attendanceData)
     const workingDays = entries.filter(([_, data]) => data.actualTime && data.actualTime !== "00:00")
     const regularWorkDays = workingDays.filter(([_, data]) => 
-      !["late", "early-leave", "absence"].includes(data.type || ""))
+      !["holiday-work", "paid-leave", "am-leave", "pm-leave", "special-leave", 
+        "compensatory-leave", "compensatory-leave-planned", "absence", "late", 
+        "early-leave", "delay", "shift", "business-holiday"].includes(data.type || ""))
     const holidayWorkDays = workingDays.filter(([_, data]) => data.type === "holiday-work")
     const absenceDays = entries.filter(([_, data]) => data.type === "absence")
     const actualTimes = workingDays.map(([_, data]) => data.actualTime)
@@ -168,8 +172,8 @@ export default function AttendancePage() {
       return acc + (isNaN(hours) ? 0 : hours)
     }, 0)
     const paidLeaveDays = entries.reduce((acc, [_, data]) => {
-      if (data.type === "full-leave") return acc + 1
-      if (data.type === "half-leave") return acc + 0.5
+      if (data.type === "paid-leave") return acc + 1
+      if (data.type === "am-leave" || data.type === "pm-leave") return acc + 0.5
       return acc
     }, 0)
 
@@ -210,6 +214,21 @@ export default function AttendancePage() {
       // 値が空になった場合は実働時間をクリア
       if (!value.trim()) {
         newData.actualTime = ''
+      }
+      // 入力値が変更された場合で、3つの時間項目が全て入力済みなら実働時間を計算
+      else if (
+        (field === 'startTime' && newData.endTime && newData.breakTime) || 
+        (field === 'endTime' && newData.startTime && newData.breakTime) || 
+        (field === 'breakTime' && newData.startTime && newData.endTime)
+      ) {
+        const actualTime = calculateActualTime(
+          newData.startTime,
+          newData.endTime,
+          newData.breakTime
+        )
+        if (actualTime) {
+          newData.actualTime = actualTime
+        }
       }
     } else {
       // その他のフィールド
@@ -322,7 +341,7 @@ export default function AttendancePage() {
           // 休憩時間を時:分形式に変換
           const breakHours = Math.floor((detail.break_time || 0) / 60)
           const breakMinutes = (detail.break_time || 0) % 60
-          const breakTime = `${breakHours}:${breakMinutes.toString().padStart(2, '0')}`
+          const breakTime = `${breakHours.toString().padStart(2, '0')}:${breakMinutes.toString().padStart(2, '0')}`
 
           // 開始時間と終了時間をHH:MM形式に整形
           const startTime = detail.start_time ? detail.start_time.substring(0, 5) : '';
@@ -335,7 +354,7 @@ export default function AttendancePage() {
             actualTime: actualTime,
             type: type,
             remarks: detail.remarks || '',
-            lateEarlyHours: detail.late_early_hours?.toString() || ''
+            lateEarlyHours: detail.late_early_hours ? detail.late_early_hours.toFixed(1) : ''
           }
         })
 
@@ -555,12 +574,20 @@ export default function AttendancePage() {
     try {
       await handleSaveData();
       
+      // 保存成功後、ステータスを更新
+      setStatus('10');
+      
       // 成功メッセージを表示
       setMessageWithStability({ 
         type: 'success', 
         text: 'チェックが完了し、データを保存しました。ステータスを更新しました。',
         position: 'bottom'
       });
+      
+      // 保存後にデータを再取得
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth() + 1;
+      await fetchAttendanceData(year, month);
     } catch (error) {
       console.error('保存処理でエラーが発生しました:', error);
       setMessageWithStability({ 
@@ -579,7 +606,7 @@ export default function AttendancePage() {
       throw new Error('ユーザー情報または所属情報が取得できません。再ログインしてください。');
     }
 
-    setIsLoading(true);
+    setIsSaving(true);
     setMessageWithStability(null);
 
     try {
@@ -763,7 +790,7 @@ export default function AttendancePage() {
       console.log('詳細データの保存に成功しました');
       return true;
     } finally {
-      setIsLoading(false);
+      setIsSaving(false);
     }
   }
 
@@ -1085,7 +1112,7 @@ export default function AttendancePage() {
                       <Button 
                         onClick={handleCheck} 
                         className="bg-green-600 hover:bg-green-700"
-                        disabled={isLoading}
+                        disabled={isLoading || isSaving}
                       >
                         <CheckSquare className="h-4 w-4 mr-2" />
                         チェック
@@ -1093,9 +1120,9 @@ export default function AttendancePage() {
                       <Button 
                         onClick={handleSave} 
                         className="bg-blue-600 hover:bg-blue-700"
-                        disabled={isLoading}
+                        disabled={isLoading || isSaving}
                       >
-                        {isLoading ? (
+                        {isSaving ? (
                           <span className="flex items-center">
                             <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -1115,7 +1142,7 @@ export default function AttendancePage() {
                     <Button 
                       onClick={moveToEditStatus} 
                       className="bg-amber-600 hover:bg-amber-700"
-                      disabled={isLoading}
+                      disabled={isLoading || isSaving}
                     >
                       <Edit className="h-4 w-4 mr-2" />
                       再編集
