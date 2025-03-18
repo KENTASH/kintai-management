@@ -500,16 +500,48 @@ export default function AttendancePage() {
 
   // チェック処理を行う関数
   const handleCheck = async () => {
-    if (!userInfo?.id) {
+    if (!userInfo?.id || !branchInfo?.code) {
       setMessageWithStability({ 
         type: 'error', 
-        text: 'ユーザー情報が取得できません。再ログインしてください。',
+        text: 'ユーザー情報または所属情報が取得できません。再ログインしてください。',
         persistent: true
       });
       return;
     }
 
-    const errors: string[] = [];
+    // 保存ボタンと同様のバリデーション処理を実行
+    const validationErrors: string[] = [];
+
+    // 時刻形式のバリデーションチェック
+    Object.entries(attendanceData).forEach(([date, data]) => {
+      const { startTime, endTime } = data;
+      const dateDisplay = format(new Date(date), 'M/d');
+
+      // 時刻形式のバリデーション（HH:MM形式かどうか）
+      const timePattern = /^([0-1][0-9]|2[0-3]):([0-5][0-9])$/;
+      
+      // 開始時間のチェック
+      if (startTime && !timePattern.test(startTime)) {
+        validationErrors.push(`${dateDisplay}の開始時間「${startTime}」が正しい形式（HH:MM）ではありません。`);
+      }
+      
+      // 終了時間のチェック
+      if (endTime && !timePattern.test(endTime)) {
+        validationErrors.push(`${dateDisplay}の終了時間「${endTime}」が正しい形式（HH:MM）ではありません。`);
+      }
+      
+      // 開始時間と終了時間の逆転チェック
+      if (startTime && endTime && timePattern.test(startTime) && timePattern.test(endTime)) {
+        const start = parse(startTime, 'HH:mm', new Date());
+        const end = parse(endTime, 'HH:mm', new Date());
+        
+        if (end < start) {
+          validationErrors.push(`${dateDisplay}の終了時間（${endTime}）が開始時間（${startTime}）より前になっています。`);
+        }
+      }
+    });
+
+    // チェックボタン固有のバリデーション処理
     const weekdays: string[] = [];
     
     // 平日の日付を収集
@@ -530,14 +562,14 @@ export default function AttendancePage() {
       const hasAllInputs = startTime && endTime && breakTime && remarks;
       
       if (hasAnyInput && !hasAllInputs) {
-        errors.push(`${dateDisplay}の開始時間、終了時間、休憩時間、備考は必須入力です`);
+        validationErrors.push(`${dateDisplay}の開始時間、終了時間、休憩時間、備考は必須入力です`);
       }
       
       // 2. 勤怠区分または遅刻・早退時間が入力されていて開始時間、終了時間、休憩時間、備考に１つでも未入力があった場合
       const hasTypeOrLateEarly = (type && type !== 'none') || lateEarlyHours;
       
       if (hasTypeOrLateEarly && !hasAllInputs) {
-        errors.push(`${dateDisplay}の開始時間、終了時間、休憩時間、備考は必須入力です`);
+        validationErrors.push(`${dateDisplay}の開始時間、終了時間、休憩時間、備考は必須入力です`);
       }
       
       // 入力がある日付を平日リストから削除
@@ -552,29 +584,25 @@ export default function AttendancePage() {
     // 3. 平日なのにも関わらず入力欄が１つも入力されていない日付があるかチェック
     weekdays.forEach(date => {
       const dateDisplay = format(new Date(date), 'M/d');
-      errors.push(`${dateDisplay}の勤務実績が入力されていません。`);
+      validationErrors.push(`${dateDisplay}の勤務実績が入力されていません。`);
     });
     
-    // エラーがある場合はメッセージを表示
-    if (errors.length > 0) {
+    // バリデーションエラーがある場合は処理を中断
+    if (validationErrors.length > 0) {
       setMessageWithStability({ 
         type: 'error', 
-        text: errors.join('\n'),
+        text: `以下のエラーを修正してください：\n${validationErrors.join('\n')}`,
         persistent: true,
         position: 'top'
       });
       return;
     }
     
-    // すべてのチェックに問題がなかった場合はステータスを次に進める
-    // 明示的に '10' に設定
-    setStatus('10');
-    
-    // 保存処理を実行
     try {
+      // データベースに保存（保存ボタンと同じ処理）
       await handleSaveData();
       
-      // 保存成功後、ステータスを更新
+      // 保存成功後、ステータスを更新（チェックボタン特有の処理）
       setStatus('10');
       
       // 成功メッセージを表示
@@ -911,7 +939,7 @@ export default function AttendancePage() {
 
     // 中央配置のモーダルメッセージ（検索中表示用）
     if (message.position === 'center') {
-      return (
+  return (
         <div className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-50">
           <div className={`
             rounded-lg border p-6 
@@ -1095,7 +1123,7 @@ export default function AttendancePage() {
                         {userInfo?.last_name && userInfo?.first_name 
                           ? `${userInfo.last_name} ${userInfo.first_name}` 
                           : userInfo?.last_name || userInfo?.first_name || ''}
-                      </div>
+                    </div>
                     </div>
                     <div>
                       <div className="text-sm text-muted-foreground">ステータス</div>
@@ -1132,11 +1160,11 @@ export default function AttendancePage() {
                           </span>
                         ) : (
                           <>
-                          <Save className="h-4 w-4 mr-2" />
-                          {t("save")}
+                  <Save className="h-4 w-4 mr-2" />
+                  {t("save")}
                           </>
                         )}
-                      </Button>
+                </Button>
                     </>
                   ) : (
                     <Button 
@@ -1220,15 +1248,15 @@ export default function AttendancePage() {
                         </div>
                         <div className="col-span-1">
                           {isEditable() ? (
-                            <Input
-                              type="text"
-                              inputMode="numeric"
-                              placeholder="HH:MM"
-                              value={attendanceData[dateKey]?.startTime || ""}
-                              onChange={(e) => handleTimeChange(day, 'startTime', e.target.value)}
+                          <Input
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="HH:MM"
+                            value={attendanceData[dateKey]?.startTime || ""}
+                            onChange={(e) => handleTimeChange(day, 'startTime', e.target.value)}
                               onBlur={() => handleTimeBlur(day)}
                               className="h-8 text-center placeholder:text-gray-300 border-[#d1d5db] border-opacity-85"
-                            />
+                          />
                           ) : (
                             <div className="h-8 flex items-center justify-center font-medium">
                               {attendanceData[dateKey]?.startTime || ""}
@@ -1237,15 +1265,15 @@ export default function AttendancePage() {
                         </div>
                         <div className="col-span-1">
                           {isEditable() ? (
-                            <Input
-                              type="text"
-                              inputMode="numeric"
-                              placeholder="HH:MM"
-                              value={attendanceData[dateKey]?.endTime || ""}
-                              onChange={(e) => handleTimeChange(day, 'endTime', e.target.value)}
+                          <Input
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="HH:MM"
+                            value={attendanceData[dateKey]?.endTime || ""}
+                            onChange={(e) => handleTimeChange(day, 'endTime', e.target.value)}
                               onBlur={() => handleTimeBlur(day)}
                               className="h-8 text-center placeholder:text-gray-300 border-[#d1d5db] border-opacity-85"
-                            />
+                          />
                           ) : (
                             <div className="h-8 flex items-center justify-center font-medium">
                               {attendanceData[dateKey]?.endTime || ""}
@@ -1254,15 +1282,15 @@ export default function AttendancePage() {
                         </div>
                         <div className="col-span-1">
                           {isEditable() ? (
-                            <Input
-                              type="text"
-                              inputMode="numeric"
-                              placeholder="HH:MM"
-                              value={attendanceData[dateKey]?.breakTime || ""}
-                              onChange={(e) => handleTimeChange(day, 'breakTime', e.target.value)}
+                          <Input
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="HH:MM"
+                            value={attendanceData[dateKey]?.breakTime || ""}
+                            onChange={(e) => handleTimeChange(day, 'breakTime', e.target.value)}
                               onBlur={() => handleTimeBlur(day)}
                               className="h-8 text-center placeholder:text-gray-300 border-[#d1d5db] border-opacity-85"
-                            />
+                          />
                           ) : (
                             <div className="h-8 flex items-center justify-center font-medium">
                               {attendanceData[dateKey]?.breakTime || ""}
@@ -1276,30 +1304,30 @@ export default function AttendancePage() {
                         </div>
                         <div className="col-span-2">
                           {isEditable() ? (
-                            <Select
-                              onValueChange={(value) => handleTimeChange(day, 'type', value)}
-                              value={attendanceData[dateKey]?.type || "none"}
-                            >
+                          <Select
+                            onValueChange={(value) => handleTimeChange(day, 'type', value)}
+                            value={attendanceData[dateKey]?.type || "none"}
+                          >
                               <SelectTrigger className="h-8 border-[#d1d5db] border-opacity-85">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none" className="h-8"></SelectItem>
-                                <SelectItem value="holiday-work" className="h-8">休出</SelectItem>
-                                <SelectItem value="paid-leave" className="h-8">有休</SelectItem>
-                                <SelectItem value="am-leave" className="h-8">前休</SelectItem>
-                                <SelectItem value="pm-leave" className="h-8">後休</SelectItem>
-                                <SelectItem value="special-leave" className="h-8">特休</SelectItem>
-                                <SelectItem value="compensatory-leave" className="h-8">振休</SelectItem>
-                                <SelectItem value="compensatory-leave-planned" className="h-8">振予</SelectItem>
-                                <SelectItem value="absence" className="h-8">欠勤</SelectItem>
-                                <SelectItem value="late" className="h-8">遅刻</SelectItem>
-                                <SelectItem value="early-leave" className="h-8">早退</SelectItem>
-                                <SelectItem value="delay" className="h-8">遅延</SelectItem>
-                                <SelectItem value="shift" className="h-8">シフト</SelectItem>
-                                <SelectItem value="business-holiday" className="h-8">休業</SelectItem>
-                              </SelectContent>
-                            </Select>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none" className="h-8"></SelectItem>
+                              <SelectItem value="holiday-work" className="h-8">休出</SelectItem>
+                              <SelectItem value="paid-leave" className="h-8">有休</SelectItem>
+                              <SelectItem value="am-leave" className="h-8">前休</SelectItem>
+                              <SelectItem value="pm-leave" className="h-8">後休</SelectItem>
+                              <SelectItem value="special-leave" className="h-8">特休</SelectItem>
+                              <SelectItem value="compensatory-leave" className="h-8">振休</SelectItem>
+                              <SelectItem value="compensatory-leave-planned" className="h-8">振予</SelectItem>
+                              <SelectItem value="absence" className="h-8">欠勤</SelectItem>
+                              <SelectItem value="late" className="h-8">遅刻</SelectItem>
+                              <SelectItem value="early-leave" className="h-8">早退</SelectItem>
+                              <SelectItem value="delay" className="h-8">遅延</SelectItem>
+                              <SelectItem value="shift" className="h-8">シフト</SelectItem>
+                              <SelectItem value="business-holiday" className="h-8">休業</SelectItem>
+                            </SelectContent>
+                          </Select>
                           ) : (
                             <div className="h-8 flex items-center px-3 font-medium">
                               {(() => {
@@ -1325,13 +1353,13 @@ export default function AttendancePage() {
                         </div>
                         <div className="col-span-4">
                           {isEditable() ? (
-                            <Input
-                              type="text"
-                              value={attendanceData[dateKey]?.remarks || ""}
-                              onChange={(e) => handleTimeChange(day, 'remarks', e.target.value)}
+                          <Input
+                            type="text"
+                            value={attendanceData[dateKey]?.remarks || ""}
+                            onChange={(e) => handleTimeChange(day, 'remarks', e.target.value)}
                               className="h-8 placeholder:text-gray-300 border-[#d1d5db] border-opacity-85"
-                              placeholder={t("remarks-placeholder")}
-                            />
+                            placeholder={t("remarks-placeholder")}
+                          />
                           ) : (
                             <div className="h-8 flex items-center px-3 font-medium">
                               {attendanceData[dateKey]?.remarks || ""}
@@ -1340,14 +1368,14 @@ export default function AttendancePage() {
                         </div>
                         <div className="col-span-1">
                           {isEditable() ? (
-                            <Input
-                              type="text"
-                              inputMode="numeric"
-                              placeholder="0.0"
-                              value={attendanceData[dateKey]?.lateEarlyHours || ""}
-                              onChange={(e) => handleTimeChange(day, 'lateEarlyHours', e.target.value)}
+                          <Input
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="0.0"
+                            value={attendanceData[dateKey]?.lateEarlyHours || ""}
+                            onChange={(e) => handleTimeChange(day, 'lateEarlyHours', e.target.value)}
                               className="h-8 text-center placeholder:text-gray-300 border-[#d1d5db] border-opacity-85"
-                            />
+                          />
                           ) : (
                             <div className="h-8 flex items-center justify-center font-medium">
                               {attendanceData[dateKey]?.lateEarlyHours || ""}
