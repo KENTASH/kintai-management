@@ -135,7 +135,11 @@ interface Message {
 
 export default function AttendancePage() {
   const { t } = useI18n()
-  const [currentDate, setCurrentDate] = useState(new Date())
+  // 初期日付を設定（現在の日付から1日を引いて、前月の最終日を設定）
+  const [currentDate, setCurrentDate] = useState(() => {
+    const now = new Date()
+    return new Date(now.getFullYear(), now.getMonth(), 1)
+  })
   const [workplace, setWorkplace] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -406,21 +410,6 @@ export default function AttendancePage() {
     }
   }, [userInfo, currentDate])
 
-  // 年選択時のハンドラー
-  const handleYearChange = (year: string) => {
-    const newDate = new Date(currentDate)
-    newDate.setFullYear(parseInt(year))
-    setCurrentDate(newDate)
-    setMessageWithStability({ 
-      type: 'info', 
-      text: '勤怠データを検索中です...',
-      position: 'center',
-      alignment: 'center',
-      persistent: true
-    });
-    fetchAttendanceData(parseInt(year), newDate.getMonth() + 1)
-  }
-
   // 月選択時のハンドラー
   const handleMonthChange = (month: string) => {
     const newDate = new Date(currentDate)
@@ -434,6 +423,21 @@ export default function AttendancePage() {
       persistent: true
     });
     fetchAttendanceData(newDate.getFullYear(), parseInt(month))
+  }
+
+  // 年選択時のハンドラー
+  const handleYearChange = (year: string) => {
+    const newDate = new Date(currentDate)
+    newDate.setFullYear(parseInt(year))
+    setCurrentDate(newDate)
+    setMessageWithStability({ 
+      type: 'info', 
+      text: '勤怠データを検索中です...',
+      position: 'center',
+      alignment: 'center',
+      persistent: true
+    });
+    fetchAttendanceData(parseInt(year), newDate.getMonth() + 1)
   }
 
   // メッセージの自動消去
@@ -1035,11 +1039,75 @@ export default function AttendancePage() {
       <MessageAlert />
 
       <Tabs defaultValue="attendance" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="attendance">勤怠入力</TabsTrigger>
-          <TabsTrigger value="expenses">経費請求</TabsTrigger>
-          <TabsTrigger value="business">業務請求</TabsTrigger>
-        </TabsList>
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-8">
+            <div className="flex items-center gap-4">
+              <Select
+                value={currentDate.getFullYear().toString()}
+                onValueChange={handleYearChange}
+              >
+                <SelectTrigger className="w-28">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {years.map(year => (
+                    <SelectItem key={year} value={year.toString()}>
+                      {year}年
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={(currentDate.getMonth() + 1).toString()}
+                onValueChange={handleMonthChange}
+              >
+                <SelectTrigger className="w-24">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {months.map(month => (
+                    <SelectItem key={month} value={month.toString()}>
+                      {month}月
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center gap-8">
+              <div>
+                <div className="text-sm text-muted-foreground">{t("employee-id")}</div>
+                <div className="font-medium">{userInfo?.employee_id || ''}</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">{t("department")}</div>
+                <div className="font-medium">{branchInfo?.name || ''}</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">{t("name")}</div>
+                <div className="font-medium">
+                  {userInfo?.last_name && userInfo?.first_name 
+                    ? `${userInfo.last_name} ${userInfo.first_name}` 
+                    : userInfo?.last_name || userInfo?.first_name || ''}
+                </div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">ステータス</div>
+                <div className="font-medium flex items-center gap-1">
+                  {getStatusIcon(status)}
+                  {getStatusName(status)}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <TabsList className="h-9">
+            <TabsTrigger value="attendance">勤怠入力</TabsTrigger>
+            <TabsTrigger value="expenses">経費請求</TabsTrigger>
+            <TabsTrigger value="business">業務請求</TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="attendance">
           <Card>
@@ -1047,38 +1115,6 @@ export default function AttendancePage() {
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-8">
                   <div className="flex items-center gap-4">
-                    <Select
-                      value={currentDate.getFullYear().toString()}
-                      onValueChange={handleYearChange}
-                    >
-                      <SelectTrigger className="w-28">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {years.map(year => (
-                          <SelectItem key={year} value={year.toString()}>
-                            {year}年
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-
-                    <Select
-                      value={(currentDate.getMonth() + 1).toString()}
-                      onValueChange={handleMonthChange}
-                    >
-                      <SelectTrigger className="w-24">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {months.map(month => (
-                          <SelectItem key={month} value={month.toString()}>
-                            {month}月
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    
                     {isEditable() ? (
                       <Input
                         value={workplace}
@@ -1092,32 +1128,6 @@ export default function AttendancePage() {
                         <div className="font-medium">{workplace || t("enter-workplace")}</div>
                       </div>
                     )}
-                  </div>
-
-                  <div className="flex items-center gap-8">
-                    <div>
-                      <div className="text-sm text-muted-foreground">{t("employee-id")}</div>
-                      <div className="font-medium">{userInfo?.employee_id || ''}</div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-muted-foreground">{t("department")}</div>
-                      <div className="font-medium">{branchInfo?.name || ''}</div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-muted-foreground">{t("name")}</div>
-                      <div className="font-medium">
-                        {userInfo?.last_name && userInfo?.first_name 
-                          ? `${userInfo.last_name} ${userInfo.first_name}` 
-                          : userInfo?.last_name || userInfo?.first_name || ''}
-                    </div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-muted-foreground">ステータス</div>
-                      <div className="font-medium flex items-center gap-1">
-                        {getStatusIcon(status)}
-                        {getStatusName(status)}
-                      </div>
-                    </div>
                   </div>
                 </div>
 
@@ -1147,11 +1157,11 @@ export default function AttendancePage() {
                           </span>
                         ) : (
                           <>
-                  <Save className="h-4 w-4 mr-2" />
-                  {t("save")}
+                            <Save className="h-4 w-4 mr-2" />
+                            {t("save")}
                           </>
                         )}
-                </Button>
+                      </Button>
                     </>
                   ) : (
                     <Button 
