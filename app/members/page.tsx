@@ -371,7 +371,13 @@ export default function MembersPage() {
       return;
     }
     
-    setMessage(newMessage);
+    // メッセージを更新する前に、既存のメッセージをクリア
+    setMessage(null);
+    
+    // 少し遅延させて新しいメッセージを設定
+    setTimeout(() => {
+      setMessage(newMessage);
+    }, 100);
   }
   
   // 検索処理の実装
@@ -1381,12 +1387,12 @@ export default function MembersPage() {
       </React.Fragment>
     ));
 
-    // すべてのメッセージを画面上部に表示
     return (
       <div className="fixed top-16 left-0 right-0 z-[100] flex justify-center pointer-events-none">
         <AnimatePresence mode="wait">
           {message && (
             <motion.div
+              key={message.text} // キーを追加してアニメーションを強制
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}

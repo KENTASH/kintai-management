@@ -440,6 +440,7 @@ export default function AttendancePage() {
       // 新しいタイマーをセットする前に既存のタイマーをクリア
       if (timer) clearTimeout(timer);
       
+      // 表示時間を3秒に設定
       timer = setTimeout(() => {
         setMessageWithStability(null)
       }, 3000)
@@ -459,7 +460,13 @@ export default function AttendancePage() {
       return;
     }
     
-    setMessage(newMessage);
+    // メッセージを更新する前に、既存のメッセージをクリア
+    setMessage(null);
+    
+    // 少し遅延させて新しいメッセージを設定
+    setTimeout(() => {
+      setMessage(newMessage);
+    }, 100);
   }
 
   // メッセージを閉じる処理
@@ -880,16 +887,18 @@ export default function AttendancePage() {
 
     try {
       await handleSaveData();
-      setMessageWithStability({ 
-        type: 'success', 
-        text: '勤怠データを保存しました',
-        position: 'bottom'
-      });
       
       // 保存後にデータを再取得
       const year = currentDate.getFullYear();
       const month = currentDate.getMonth() + 1;
       await fetchAttendanceData(year, month);
+      
+      // データ取得後に成功メッセージを表示
+      setMessageWithStability({ 
+        type: 'success', 
+        text: '勤怠データを保存しました',
+        position: 'bottom'
+      });
     } catch (error) {
       console.error('保存処理でエラーが発生しました:', error);
       setMessageWithStability({ 
@@ -941,11 +950,20 @@ export default function AttendancePage() {
     if (message.position === 'center') {
       return (
         <div className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-50">
-          <div className={`
-            rounded-lg border p-6 
-            shadow-lg max-w-md w-full
-            ${styles[message.type]}
-          `}>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ 
+              duration: 0.3,
+              ease: "easeInOut"
+            }}
+            className={`
+              rounded-lg border p-6 
+              shadow-lg max-w-md w-full
+              ${styles[message.type]}
+            `}
+          >
             <div className="flex flex-col items-center gap-4 text-center">
               <div className="flex items-center justify-center w-12 h-12 rounded-full bg-blue-100">
                 {message.type === 'info' && (
@@ -958,7 +976,7 @@ export default function AttendancePage() {
               </div>
               <span className="text-lg font-medium whitespace-pre-line">{formattedMessage}</span>
             </div>
-          </div>
+          </motion.div>
         </div>
       )
     }
@@ -969,6 +987,7 @@ export default function AttendancePage() {
         <AnimatePresence mode="wait">
           {message && (
             <motion.div
+              key={message.text} // キーを追加してアニメーションを強制
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
