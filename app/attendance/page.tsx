@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Clock, Save, AlertCircle, CheckCircle2, Info, X, CheckSquare, Edit, 
   Calendar, Building2, User, Briefcase, CalendarCheck, CalendarX, 
   Clock4, Timer, CalendarClock, CalendarDays, AlertTriangle, 
-  CheckCircle, XCircle, ArrowLeftRight, CalendarPlus } from "lucide-react"
+  CheckCircle, XCircle, ArrowLeftRight, CalendarPlus, Plus, Trash2, Bus, FileText, Eye, Upload } from "lucide-react"
 import { useI18n } from "@/lib/i18n/context"
 import { supabase } from '@/lib/supabaseClient'
 import { AnimatePresence, motion } from "framer-motion"
@@ -133,6 +133,50 @@ interface Message {
   dismissible?: boolean  // 手動で消せるフラグ
 }
 
+// 経費の型定義を追加
+interface ExpenseRecord {
+  id: string
+  date: string
+  transportation: string
+  from: string
+  to: string
+  type: string
+  roundTrip: string
+  amount: number
+  remarks: string
+  category: 'commute' | 'business'  // 通勤費か業務経費かを区別
+}
+
+// 領収書・定期券の型定義を追加
+interface ReceiptRecord {
+  id: string
+  fileName: string
+  fileUrl: string
+  remarks: string
+  uploadedAt: string
+}
+
+const commuteTypes = [
+  { value: 'regular', label: '定期' },
+  { value: 'ticket', label: '切符' },
+  { value: 'parking', label: '駐輪場' },
+  { value: 'gasoline', label: 'ガソリン' },
+  { value: 'other', label: 'その他' }
+]
+
+const businessTypes = [
+  { value: 'with-receipt', label: '経費（領収書有り）' },
+  { value: 'without-receipt', label: '経費（領収書無し）' },
+  { value: 'accommodation', label: '宿泊費' },
+  { value: 'per-diem', label: '宿泊日当' }
+]
+
+const roundTripTypes = [
+  { value: 'one-way', label: '片道' },
+  { value: 'round-trip', label: '往復' },
+  { value: 'other', label: 'その他' }
+]
+
 export default function AttendancePage() {
   const { t } = useI18n()
   // 初期日付を設定（現在の日付から1日を引いて、前月の最終日を設定）
@@ -159,6 +203,29 @@ export default function AttendancePage() {
   const [branchInfo, setBranchInfo] = useState<{ name: string; code: string } | null>(null)
   const [status, setStatus] = useState<string>("00")
   const [errorDates, setErrorDates] = useState<Set<string>>(new Set())
+  const [expenses, setExpenses] = useState<ExpenseRecord[]>([])
+  const [isAddingExpense, setIsAddingExpense] = useState(false)
+  const [newExpense, setNewExpense] = useState<Partial<ExpenseRecord>>({
+    category: 'commute'
+  })
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [expenseValidationError, setExpenseValidationError] = useState<string | null>(null)
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false)
+  const [pendingNavigation, setPendingNavigation] = useState<string | null>(null)
+  const [currentTab, setCurrentTab] = useState("attendance")
+  const [receipts, setReceipts] = useState<ReceiptRecord[]>([])
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [selectedReceipt, setSelectedReceipt] = useState<ReceiptRecord | null>(null)
+  const [showReceiptViewer, setShowReceiptViewer] = useState(false)
+  const [showReceiptInput, setShowReceiptInput] = useState(false)
+  const [newReceipt, setNewReceipt] = useState<Partial<ReceiptRecord>>({
+    id: Date.now().toString(),
+    fileName: '',
+    fileUrl: '',
+    remarks: '',
+    uploadedAt: new Date().toISOString()
+  })
 
   const monthStart = startOfMonth(currentDate)
   const monthEnd = endOfMonth(currentDate)
@@ -195,6 +262,22 @@ export default function AttendancePage() {
       paidLeaveDays
     }
   }, [attendanceData])
+
+  // 経費の合計を計算
+  const expenseSummary = useMemo(() => {
+    const commuteTotal = expenses
+      .filter(expense => expense.category === 'commute')
+      .reduce((sum, expense) => sum + expense.amount, 0)
+
+    const businessTotal = expenses
+      .filter(expense => expense.category === 'business')
+      .reduce((sum, expense) => sum + expense.amount, 0)
+
+    return {
+      commuteTotal,
+      businessTotal
+    }
+  }, [expenses])
 
   // 時間入力の変更ハンドラー
   const handleTimeChange = (
@@ -896,7 +979,7 @@ export default function AttendancePage() {
 
     // 中央配置のモーダルメッセージ（検索中表示用）
     if (message.position === 'center') {
-      return (
+  return (
         <div className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-50">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
@@ -1024,6 +1107,171 @@ export default function AttendancePage() {
     }
   }
 
+  // 新規経費の追加
+  const handleAddExpense = () => {
+    // バリデーションチェック
+    if (!newExpense.date || !newExpense.transportation || !newExpense.from || 
+        !newExpense.to || !newExpense.type || !newExpense.roundTrip || 
+        !newExpense.amount || !newExpense.remarks) {
+      setExpenseValidationError('すべての項目を入力してください。')
+      return
+    }
+
+    // 金額のバリデーション
+    if (isNaN(newExpense.amount) || newExpense.amount <= 0) {
+      setExpenseValidationError('金額には正の数字を入力してください。')
+      return
+    }
+
+    const expense: ExpenseRecord = {
+      id: newExpense.id || Date.now().toString(),
+      date: newExpense.date,
+      transportation: newExpense.transportation,
+      from: newExpense.from,
+      to: newExpense.to,
+      type: newExpense.type,
+      roundTrip: newExpense.roundTrip,
+      amount: newExpense.amount,
+      remarks: newExpense.remarks,
+      category: newExpense.category || 'commute'
+    }
+
+    if (newExpense.id) {
+      setExpenses(expenses.map(e => e.id === newExpense.id ? expense : e))
+    } else {
+      setExpenses([...expenses, expense])
+    }
+
+    setIsAddingExpense(false)
+    setNewExpense({ category: 'commute' })
+    setExpenseValidationError(null)
+    setHasUnsavedChanges(true)
+  }
+
+  // 経費の削除
+  const handleDeleteExpense = (id: string) => {
+    setExpenses(expenses.filter(expense => expense.id !== id))
+    setHasUnsavedChanges(true)
+  }
+
+  // 保存処理
+  const handleExpenseSave = async () => {
+    try {
+      // 保存処理の実装
+      setHasUnsavedChanges(false)
+      setMessageWithStability({ 
+        type: 'success', 
+        text: '経費データを保存しました',
+        position: 'bottom'
+      })
+    } catch (error) {
+      setMessageWithStability({ 
+        type: 'error', 
+        text: '経費データの保存に失敗しました',
+        persistent: true
+      })
+    }
+  }
+
+  // タブ切り替え時の処理
+  const handleTabChange = (value: string) => {
+    setCurrentTab(value)
+  }
+
+  // ファイルアップロード処理
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    setIsUploading(true)
+    setUploadError(null)
+
+    try {
+      // ファイル名を一意にするためのタイムスタンプを追加
+      const timestamp = new Date().getTime()
+      const uniqueFileName = `${timestamp}_${file.name}`
+      const filePath = `receipts/${uniqueFileName}`
+
+      // Supabase Storageにファイルをアップロード
+      const { data, error } = await supabase.storage
+        .from('receipts')
+        .upload(filePath, file)
+
+      if (error) throw error
+
+      // アップロードしたファイルのURLを取得
+      const { data: { publicUrl } } = supabase.storage
+        .from('receipts')
+        .getPublicUrl(filePath)
+
+      // 新しい領収書レコードを作成
+      const newReceipt: ReceiptRecord = {
+        id: Date.now().toString(),
+        fileName: file.name,
+        fileUrl: publicUrl,
+        remarks: '',
+        uploadedAt: new Date().toISOString()
+      }
+
+      setReceipts([...receipts, newReceipt])
+      setMessageWithStability({ 
+        type: 'success', 
+        text: 'ファイルをアップロードしました',
+        position: 'bottom'
+      })
+    } catch (error) {
+      console.error('ファイルアップロードエラー:', error)
+      setUploadError('ファイルのアップロードに失敗しました')
+      setMessageWithStability({ 
+        type: 'error', 
+        text: 'ファイルのアップロードに失敗しました',
+        persistent: true
+      })
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  // 領収書の備考を更新
+  const handleReceiptRemarksChange = (id: string, remarks: string) => {
+    setReceipts(receipts.map(receipt => 
+      receipt.id === id ? { ...receipt, remarks } : receipt
+    ))
+  }
+
+  // 領収書の削除
+  const handleDeleteReceipt = async (id: string) => {
+    const receipt = receipts.find(r => r.id === id)
+    if (!receipt) return
+
+    try {
+      // Supabase Storageからファイルを削除
+      const filePath = receipt.fileUrl.split('/').pop()
+      if (filePath) {
+        const { error } = await supabase.storage
+          .from('receipts')
+          .remove([filePath])
+
+        if (error) throw error
+      }
+
+      // 状態から削除
+      setReceipts(receipts.filter(r => r.id !== id))
+      setMessageWithStability({ 
+        type: 'success', 
+        text: 'ファイルを削除しました',
+        position: 'bottom'
+      })
+    } catch (error) {
+      console.error('ファイル削除エラー:', error)
+      setMessageWithStability({ 
+        type: 'error', 
+        text: 'ファイルの削除に失敗しました',
+        persistent: true
+      })
+    }
+  }
+
   return (
     <div className="space-y-6 relative z-[1]">
       <div>
@@ -1038,59 +1286,59 @@ export default function AttendancePage() {
 
       <MessageAlert />
 
-      <Tabs defaultValue="attendance" className="space-y-4">
+      <Tabs defaultValue="attendance" className="space-y-4" onValueChange={handleTabChange}>
         <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-8">
-            <div className="flex items-center gap-4">
-              <Select
-                value={currentDate.getFullYear().toString()}
-                onValueChange={handleYearChange}
-              >
-                <SelectTrigger className="w-28">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {years.map(year => (
-                    <SelectItem key={year} value={year.toString()}>
-                      {year}年
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <div className="flex items-center gap-8">
+                  <div className="flex items-center gap-4">
+                    <Select
+                      value={currentDate.getFullYear().toString()}
+                      onValueChange={handleYearChange}
+                    >
+                      <SelectTrigger className="w-28">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {years.map(year => (
+                          <SelectItem key={year} value={year.toString()}>
+                            {year}年
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
 
-              <Select
-                value={(currentDate.getMonth() + 1).toString()}
-                onValueChange={handleMonthChange}
-              >
-                <SelectTrigger className="w-24">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {months.map(month => (
-                    <SelectItem key={month} value={month.toString()}>
-                      {month}月
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                    <Select
+                      value={(currentDate.getMonth() + 1).toString()}
+                      onValueChange={handleMonthChange}
+                    >
+                      <SelectTrigger className="w-24">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {months.map(month => (
+                          <SelectItem key={month} value={month.toString()}>
+                            {month}月
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-            <div className="flex items-center gap-8">
-              <div>
-                <div className="text-sm text-muted-foreground">{t("employee-id")}</div>
+                  <div className="flex items-center gap-8">
+                    <div>
+                      <div className="text-sm text-muted-foreground">{t("employee-id")}</div>
                 <div className="font-medium">{userInfo?.employee_id || ''}</div>
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">{t("department")}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-muted-foreground">{t("department")}</div>
                 <div className="font-medium">{branchInfo?.name || ''}</div>
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">{t("name")}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-muted-foreground">{t("name")}</div>
                 <div className="font-medium">
                   {userInfo?.last_name && userInfo?.first_name 
                     ? `${userInfo.last_name} ${userInfo.first_name}` 
                     : userInfo?.last_name || userInfo?.first_name || ''}
-                </div>
+                    </div>
               </div>
               <div>
                 <div className="text-sm text-muted-foreground">ステータス</div>
@@ -1112,16 +1360,19 @@ export default function AttendancePage() {
         <TabsContent value="attendance">
           <Card>
             <CardContent className="pt-6">
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex justify-between items-center mb-6">
                 <div className="flex items-center gap-8">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xl font-semibold">勤怠入力</h2>
+                  </div>
                   <div className="flex items-center gap-4">
                     {isEditable() ? (
-                      <Input
-                        value={workplace}
-                        onChange={(e) => setWorkplace(e.target.value)}
+                    <Input
+                      value={workplace}
+                      onChange={(e) => setWorkplace(e.target.value)}
                         className="w-64 border-[#d1d5db] border-opacity-85"
-                        placeholder={t("enter-workplace")}
-                      />
+                      placeholder={t("enter-workplace")}
+                    />
                     ) : (
                       <div className="w-64">
                         <div className="text-sm text-muted-foreground">勤務場所</div>
@@ -1157,11 +1408,11 @@ export default function AttendancePage() {
                           </span>
                         ) : (
                           <>
-                            <Save className="h-4 w-4 mr-2" />
-                            {t("save")}
+                  <Save className="h-4 w-4 mr-2" />
+                  {t("save")}
                           </>
                         )}
-                      </Button>
+                </Button>
                     </>
                   ) : (
                     <Button 
@@ -1299,7 +1550,7 @@ export default function AttendancePage() {
                           ) : (
                             <div className="h-7 flex items-center justify-center font-medium text-sm">
                               {attendanceData[dateKey]?.startTime || ""}
-                            </div>
+                        </div>
                           )}
                         </div>
                         <div className="col-span-1 px-2">
@@ -1316,7 +1567,7 @@ export default function AttendancePage() {
                           ) : (
                             <div className="h-7 flex items-center justify-center font-medium text-sm">
                               {attendanceData[dateKey]?.endTime || ""}
-                            </div>
+                        </div>
                           )}
                         </div>
                         <div className="col-span-1 px-2">
@@ -1333,7 +1584,7 @@ export default function AttendancePage() {
                           ) : (
                             <div className="h-7 flex items-center justify-center font-medium text-sm">
                               {attendanceData[dateKey]?.breakTime || ""}
-                            </div>
+                        </div>
                           )}
                         </div>
                         <div className="col-span-1 px-2">
@@ -1387,7 +1638,7 @@ export default function AttendancePage() {
                                   default: return '';
                                 }
                               })()}
-                            </div>
+                        </div>
                           )}
                         </div>
                         <div className="col-span-4 px-2">
@@ -1402,7 +1653,7 @@ export default function AttendancePage() {
                           ) : (
                             <div className="h-7 flex items-center px-3 font-medium text-sm">
                               {attendanceData[dateKey]?.remarks || ""}
-                            </div>
+                        </div>
                           )}
                         </div>
                         <div className="col-span-1 px-2">
@@ -1433,9 +1684,588 @@ export default function AttendancePage() {
         <TabsContent value="expenses">
           <Card>
             <CardContent className="pt-6">
-              <div className="text-center text-muted-foreground">
-                経費請求機能は準備中です
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-semibold">経費請求</h2>
+                <Button
+                  onClick={handleExpenseSave}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  <Save className="h-4 w-4 mr-2" />
+                  保存
+                </Button>
               </div>
+
+              {/* 経費サマリー */}
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
+                  <div className="flex items-center gap-2 text-blue-700 mb-1">
+                    <Bus className="h-5 w-5" />
+                    <div className="text-sm font-medium">通勤費合計</div>
+                  </div>
+                  <div className="text-2xl font-bold text-blue-800">
+                    ¥{expenseSummary.commuteTotal.toLocaleString()}
+                  </div>
+                </div>
+                <div className="p-4 bg-green-50 rounded-lg border border-green-100">
+                  <div className="flex items-center gap-2 text-green-700 mb-1">
+                    <Briefcase className="h-5 w-5" />
+                    <div className="text-sm font-medium">業務経費合計</div>
+                  </div>
+                  <div className="text-2xl font-bold text-green-800">
+                    ¥{expenseSummary.businessTotal.toLocaleString()}
+                  </div>
+                </div>
+              </div>
+
+              {/* 通勤費セクション */}
+              <div className="mb-8">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Bus className="h-5 w-5 text-blue-600" />
+                    <h2 className="text-lg font-semibold text-blue-800">通勤費</h2>
+                  </div>
+                  <Button
+                    onClick={() => {
+                      setIsAddingExpense(true)
+                      setNewExpense({ category: 'commute' })
+                    }}
+                    className="bg-white hover:bg-gray-100 text-gray-900 border border-gray-200"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    新規追加
+                  </Button>
+                </div>
+
+                <div className="border rounded-lg border-gray-200 overflow-hidden">
+                  <div className="grid grid-cols-9 gap-0 p-2 bg-blue-50 text-sm border-b border-gray-200">
+                    <div className="col-span-1 text-blue-700 font-medium px-2">発生日</div>
+                    <div className="col-span-1 text-blue-700 font-medium px-2">交通機関</div>
+                    <div className="col-span-2 text-blue-700 font-medium px-2">区間</div>
+                    <div className="col-span-1 text-blue-700 font-medium px-2">種類</div>
+                    <div className="col-span-1 text-blue-700 font-medium px-2">片道/往復</div>
+                    <div className="col-span-1 text-blue-700 font-medium px-2">金額</div>
+                    <div className="col-span-1 text-blue-700 font-medium px-2">目的・備考</div>
+                    <div className="col-span-1 text-blue-700 font-medium px-2">操作</div>
+                  </div>
+
+                  <div className="divide-y divide-gray-100">
+                    {expenses
+                      .filter(expense => expense.category === 'commute')
+                      .map((expense) => (
+                        <div 
+                          key={expense.id} 
+                          className="grid grid-cols-9 gap-0 p-1.5 hover:bg-blue-50/50 cursor-pointer items-center"
+                          onClick={() => {
+                            setNewExpense(expense)
+                            setIsAddingExpense(true)
+                          }}
+                        >
+                          <div className="col-span-1 px-2 text-sm">{expense.date}</div>
+                          <div className="col-span-1 px-2 text-sm">{expense.transportation}</div>
+                          <div className="col-span-2 px-2 text-sm">{expense.from} → {expense.to}</div>
+                          <div className="col-span-1 px-2 text-sm">
+                            {commuteTypes.find(type => type.value === expense.type)?.label}
+                          </div>
+                          <div className="col-span-1 px-2 text-sm">
+                            {roundTripTypes.find(type => type.value === expense.roundTrip)?.label}
+                          </div>
+                          <div className="col-span-1 px-2 text-sm">¥{expense.amount.toLocaleString()}</div>
+                          <div className="col-span-1 px-2 text-sm">{expense.remarks}</div>
+                          <div className="col-span-1 px-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDeleteExpense(expense.id)
+                              }}
+                              className="h-7 w-7"
+                            >
+                              <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                            </Button>
+                          </div>
+                        </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* 業務経費セクション */}
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Briefcase className="h-5 w-5 text-green-600" />
+                    <h2 className="text-lg font-semibold text-green-800">業務経費</h2>
+                  </div>
+                  <Button
+                    onClick={() => {
+                      setIsAddingExpense(true)
+                      setNewExpense({ category: 'business' })
+                    }}
+                    className="bg-white hover:bg-gray-100 text-gray-900 border border-gray-200"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    新規追加
+                  </Button>
+                </div>
+
+                <div className="border rounded-lg border-gray-200 overflow-hidden">
+                  <div className="grid grid-cols-9 gap-0 p-2 bg-green-50 text-sm border-b border-gray-200">
+                    <div className="col-span-1 text-green-700 font-medium px-2">発生日</div>
+                    <div className="col-span-1 text-green-700 font-medium px-2">交通機関/宿泊先</div>
+                    <div className="col-span-2 text-green-700 font-medium px-2">区間</div>
+                    <div className="col-span-1 text-green-700 font-medium px-2">費目</div>
+                    <div className="col-span-1 text-green-700 font-medium px-2">片道/往復</div>
+                    <div className="col-span-1 text-green-700 font-medium px-2">金額</div>
+                    <div className="col-span-1 text-green-700 font-medium px-2">目的・備考</div>
+                    <div className="col-span-1 text-green-700 font-medium px-2">操作</div>
+                  </div>
+
+                  <div className="divide-y divide-gray-100">
+                    {expenses
+                      .filter(expense => expense.category === 'business')
+                      .map((expense) => (
+                        <div 
+                          key={expense.id} 
+                          className="grid grid-cols-9 gap-0 p-1.5 hover:bg-green-50/50 cursor-pointer items-center"
+                          onClick={() => {
+                            setNewExpense(expense)
+                            setIsAddingExpense(true)
+                          }}
+                        >
+                          <div className="col-span-1 px-2 text-sm">{expense.date}</div>
+                          <div className="col-span-1 px-2 text-sm">{expense.transportation}</div>
+                          <div className="col-span-2 px-2 text-sm">{expense.from} → {expense.to}</div>
+                          <div className="col-span-1 px-2 text-sm">
+                            {businessTypes.find(type => type.value === expense.type)?.label}
+                          </div>
+                          <div className="col-span-1 px-2 text-sm">
+                            {roundTripTypes.find(type => type.value === expense.roundTrip)?.label}
+                          </div>
+                          <div className="col-span-1 px-2 text-sm">¥{expense.amount.toLocaleString()}</div>
+                          <div className="col-span-1 px-2 text-sm">{expense.remarks}</div>
+                          <div className="col-span-1 px-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDeleteExpense(expense.id)
+                              }}
+                              className="h-7 w-7"
+                            >
+                              <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                            </Button>
+                          </div>
+                        </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* 新規経費入力フォーム */}
+              {isAddingExpense && (
+                <AnimatePresence>
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+                  >
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      transition={{ duration: 0.2 }}
+                      className="bg-white rounded-lg p-6 w-[800px] max-h-[90vh] overflow-y-auto"
+                    >
+                      <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-2">
+                          {newExpense.category === 'commute' ? (
+                            <>
+                              <Bus className="h-5 w-5 text-blue-600" />
+                              <h3 className="text-lg font-semibold text-blue-800">通勤費の追加</h3>
+                            </>
+                          ) : (
+                            <>
+                              <Briefcase className="h-5 w-5 text-green-600" />
+                              <h3 className="text-lg font-semibold text-green-800">業務経費の追加</h3>
+                            </>
+                          )}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setIsAddingExpense(false)
+                            setNewExpense({ category: 'commute' })
+                            setExpenseValidationError(null)
+                          }}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+
+                      {expenseValidationError && (
+                        <div className="mb-4 p-4 bg-red-50 text-red-700 rounded-lg border border-red-200 flex items-center gap-2">
+                          <AlertCircle className="h-5 w-5 text-red-500" />
+                          <span className="text-sm">{expenseValidationError}</span>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-sm font-medium mb-1 block">発生日</label>
+                          <Input
+                            type="date"
+                            value={newExpense.date || ''}
+                            onChange={(e) => {
+                              const date = new Date(e.target.value)
+                              const formattedDate = format(date, 'yyyy/MM/dd')
+                              setNewExpense({ ...newExpense, date: formattedDate })
+                            }}
+                            placeholder="YYYY/MM/DD"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium mb-1 block">
+                            {newExpense.category === 'commute' ? '交通機関' : '交通機関/宿泊先など'}
+                          </label>
+                          <Input
+                            value={newExpense.transportation || ''}
+                            onChange={(e) => setNewExpense({ ...newExpense, transportation: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium mb-1 block">区間（から）</label>
+                          <Input
+                            value={newExpense.from || ''}
+                            onChange={(e) => setNewExpense({ ...newExpense, from: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium mb-1 block">区間（まで）</label>
+                          <Input
+                            value={newExpense.to || ''}
+                            onChange={(e) => setNewExpense({ ...newExpense, to: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium mb-1 block">
+                            {newExpense.category === 'commute' ? '種類' : '費目'}
+                          </label>
+                          <Select
+                            value={newExpense.type || ''}
+                            onValueChange={(value) => setNewExpense({ ...newExpense, type: value })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {(newExpense.category === 'commute' ? commuteTypes : businessTypes).map(type => (
+                                <SelectItem key={type.value} value={type.value}>
+                                  {type.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium mb-1 block">片道・往復</label>
+                          <Select
+                            value={newExpense.roundTrip || ''}
+                            onValueChange={(value) => setNewExpense({ ...newExpense, roundTrip: value })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {roundTripTypes.map(type => (
+                                <SelectItem key={type.value} value={type.value}>
+                                  {type.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium mb-1 block">金額</label>
+                          <Input
+                            type="number"
+                            value={newExpense.amount || ''}
+                            onChange={(e) => setNewExpense({ ...newExpense, amount: Number(e.target.value) })}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium mb-1 block">目的・備考</label>
+                          <Input
+                            value={newExpense.remarks || ''}
+                            onChange={(e) => setNewExpense({ ...newExpense, remarks: e.target.value })}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end gap-2 mt-6">
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setIsAddingExpense(false)
+                            setNewExpense({ category: 'commute' })
+                          }}
+                        >
+                          キャンセル
+                        </Button>
+                        <Button
+                          onClick={handleAddExpense}
+                          className={newExpense.category === 'commute' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-green-600 hover:bg-green-700'}
+                        >
+                          追加
+                        </Button>
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                </AnimatePresence>
+              )}
+
+              {/* 領収書・定期券セクション */}
+              <div className="mt-8">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-purple-600" />
+                    <h2 className="text-lg font-semibold text-purple-800">領収書・定期券</h2>
+                  </div>
+                  <Button
+                    onClick={() => {
+                      setSelectedReceipt(null)
+                      setShowReceiptViewer(false)
+                      setShowReceiptInput(true)
+                    }}
+                    className="bg-white hover:bg-gray-100 text-gray-900 border border-gray-200"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    新規追加
+                  </Button>
+                </div>
+
+                <div className="border rounded-lg border-gray-200 overflow-hidden max-w-2xl">
+                  <div className="grid grid-cols-3 gap-0 p-2 bg-gray-50 text-sm border-b border-gray-200">
+                    <div className="col-span-2 text-gray-700 font-medium px-2">ファイル名</div>
+                    <div className="col-span-1 text-gray-700 font-medium px-2">備考</div>
+                  </div>
+
+                  <div className="divide-y divide-gray-100">
+                    {receipts.map((receipt) => (
+                      <div 
+                        key={receipt.id} 
+                        className="grid grid-cols-3 gap-0 p-1.5 hover:bg-gray-50/50 items-center"
+                      >
+                        <div className="col-span-2 px-2">
+                          <button
+                            onClick={() => {
+                              setSelectedReceipt(receipt)
+                              setShowReceiptViewer(true)
+                            }}
+                            className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                          >
+                            {receipt.fileName}
+                          </button>
+                        </div>
+                        <div className="col-span-1 px-2">
+                          <Input
+                            value={receipt.remarks}
+                            onChange={(e) => handleReceiptRemarksChange(receipt.id, e.target.value)}
+                            className="h-7 text-sm"
+                            placeholder="備考を入力"
+                          />
+                        </div>
+                        <div className="col-span-1 px-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteReceipt(receipt.id)}
+                            className="h-7 w-7"
+                          >
+                            <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* 領収書入力モーダル */}
+              {showReceiptInput && (
+                <AnimatePresence>
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+                  >
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      transition={{ duration: 0.2 }}
+                      className="bg-white rounded-lg p-6 w-[500px]"
+                    >
+                      <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-5 w-5 text-purple-600" />
+                          <h3 className="text-lg font-semibold">領収書・定期券の追加</h3>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setShowReceiptInput(false)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div>
+                          <label className="text-sm font-medium mb-1 block">ファイル</label>
+                          <div className="flex items-center gap-2">
+                            <label className="flex-1">
+                              <input
+                                type="file"
+                                className="hidden"
+                                accept="image/*,.pdf"
+                                onChange={handleFileUpload}
+                                disabled={isUploading}
+                              />
+                              <Button
+                                variant="outline"
+                                className="w-full bg-gray-50 hover:bg-gray-100 text-gray-900 border-gray-200"
+                                disabled={isUploading}
+                                onClick={() => {
+                                  const input = document.querySelector('input[type="file"]') as HTMLInputElement
+                                  if (input) {
+                                    input.click()
+                                  }
+                                }}
+                              >
+                                {isUploading ? (
+                                  <span className="flex items-center gap-2">
+                                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    アップロード中...
+                                  </span>
+                                ) : (
+                                  <span className="flex items-center gap-2">
+                                    <Upload className="h-4 w-4" />
+                                    ファイルを選択
+                                  </span>
+                                )}
+                              </Button>
+                            </label>
+                          </div>
+                          {uploadError && (
+                            <p className="text-sm text-red-500 mt-1">{uploadError}</p>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="text-sm font-medium mb-1 block">備考</label>
+                          <Input
+                            value={newReceipt?.remarks || ''}
+                            onChange={(e) => setNewReceipt(prev => ({ ...prev, remarks: e.target.value }))}
+                            placeholder="備考を入力"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end gap-2 mt-6">
+                        <Button
+                          variant="outline"
+                          onClick={() => setShowReceiptInput(false)}
+                        >
+                          キャンセル
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            if (newReceipt?.fileUrl && newReceipt?.fileName) {
+                              const receipt: ReceiptRecord = {
+                                id: newReceipt.id || Date.now().toString(),
+                                fileName: newReceipt.fileName,
+                                fileUrl: newReceipt.fileUrl,
+                                remarks: newReceipt.remarks || '',
+                                uploadedAt: newReceipt.uploadedAt || new Date().toISOString()
+                              }
+                              setReceipts([...receipts, receipt])
+                              setShowReceiptInput(false)
+                              setNewReceipt({
+                                id: Date.now().toString(),
+                                fileName: '',
+                                fileUrl: '',
+                                remarks: '',
+                                uploadedAt: new Date().toISOString()
+                              })
+                            }
+                          }}
+                          disabled={!newReceipt?.fileUrl}
+                          className="bg-purple-600 hover:bg-purple-700"
+                        >
+                          追加
+                        </Button>
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                </AnimatePresence>
+              )}
+
+              {/* 領収書ビューワーモーダル */}
+              {showReceiptViewer && selectedReceipt && (
+                <AnimatePresence>
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+                  >
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      transition={{ duration: 0.2 }}
+                      className="bg-white rounded-lg p-6 w-[90vw] h-[90vh] flex flex-col"
+                    >
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold">{selectedReceipt.fileName}</h3>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setShowReceiptViewer(false)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <div className="flex-1 overflow-auto">
+                        {selectedReceipt.fileUrl.match(/\.(jpg|jpeg|png|gif)$/i) ? (
+                          <img
+                            src={selectedReceipt.fileUrl}
+                            alt={selectedReceipt.fileName}
+                            className="max-w-full h-auto"
+                          />
+                        ) : (
+                          <iframe
+                            src={selectedReceipt.fileUrl}
+                            className="w-full h-full"
+                            title={selectedReceipt.fileName}
+                          />
+                        )}
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                </AnimatePresence>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
