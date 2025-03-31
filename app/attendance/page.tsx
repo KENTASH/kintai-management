@@ -12,10 +12,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Clock, Save, AlertCircle, CheckCircle2, Info, X, CheckSquare, Edit, 
   Calendar, Building2, User, Briefcase, CalendarCheck, CalendarX, 
   Clock4, Timer, CalendarClock, CalendarDays, AlertTriangle, 
-  CheckCircle, XCircle, ArrowLeftRight, CalendarPlus, Plus, Trash2, Bus, FileText, Eye, Upload } from "lucide-react"
+  CheckCircle, XCircle, ArrowLeftRight, CalendarPlus, Plus, Trash2, Bus, FileText, Eye, Upload, CreditCard, Repeat, RotateCcw } from "lucide-react"
 import { useI18n } from "@/lib/i18n/context"
 import { supabase } from '@/lib/supabaseClient'
 import { AnimatePresence, motion } from "framer-motion"
+import { saveExpenseData, fetchExpenseData, type ReceiptRecord } from './expense-api'
+import type { CommuteExpense, BusinessExpense } from "./expense-api"
+import { v4 as uuidv4 } from 'uuid'
 
 interface UserInfo {
   id: string;  // users.id
@@ -135,25 +138,16 @@ interface Message {
 
 // 経費の型定義を追加
 interface ExpenseRecord {
-  id: string
-  date: string
-  transportation: string
-  from: string
-  to: string
-  type: string
-  roundTrip: string
-  amount: number
-  remarks: string
-  category: 'commute' | 'business'  // 通勤費か業務経費かを区別
-}
-
-// 領収書・定期券の型定義を追加
-interface ReceiptRecord {
-  id: string
-  fileName: string
-  fileUrl: string
-  remarks: string
-  uploadedAt: string
+  id?: string;
+  date: string;
+  transportation: string;
+  from: string;
+  to: string;
+  type: string;
+  roundTrip: string;
+  amount: number;
+  remarks?: string;
+  category: 'commute' | 'expense';
 }
 
 const commuteTypes = [
@@ -176,6 +170,19 @@ const roundTripTypes = [
   { value: 'round-trip', label: '往復' },
   { value: 'other', label: 'その他' }
 ]
+
+// 通勤手当の型はAPI用とコンポーネント用で異なるため、型エイリアスを作成
+type ExpenseItem = {
+  id: string;
+  date: string;
+  transportation: string;
+  from: string;
+  to: string;
+  type: string; // APIでは expenseType
+  roundTrip: string; // APIでは roundTripType
+  amount: number;
+  remarks: string;
+};
 
 export default function AttendancePage() {
   const { t } = useI18n()
@@ -223,9 +230,12 @@ export default function AttendancePage() {
     id: Date.now().toString(),
     fileName: '',
     fileUrl: '',
+    filePath: '',
     remarks: '',
     uploadedAt: new Date().toISOString()
   })
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [saveSuccess, setSaveSuccess] = useState(false)
 
   const monthStart = startOfMonth(currentDate)
   const monthEnd = endOfMonth(currentDate)
@@ -270,7 +280,7 @@ export default function AttendancePage() {
       .reduce((sum, expense) => sum + expense.amount, 0)
 
     const businessTotal = expenses
-      .filter(expense => expense.category === 'business')
+      .filter(expense => expense.category === 'expense')
       .reduce((sum, expense) => sum + expense.amount, 0)
 
     return {
@@ -484,44 +494,136 @@ export default function AttendancePage() {
     }
   }, [])
 
+  // 月選択時のハンドラー
+  const handleMonthChange = async (month: string) => {
+    const newMonth = parseInt(month);
+    if (!isNaN(newMonth) && newMonth >= 1 && newMonth <= 12) {
+      const newDate = new Date(currentDate);
+      newDate.setMonth(newMonth - 1);
+      setCurrentDate(newDate);
+      
+      setMessageWithStability({ 
+        type: 'info', 
+        text: 'データを検索中です...',
+        position: 'center',
+        alignment: 'center',
+        persistent: true
+      });
+      
+      // 勤怠データ取得
+      fetchAttendanceData(newDate.getFullYear(), newMonth);
+      
+      // 経費データ取得
+      const userInfoStr = sessionStorage.getItem('userProfile');
+      if (userInfoStr) {
+        const userProfile = JSON.parse(userInfoStr);
+        const userId = userProfile.id;
+        await fetchExpenseDataForDisplay(userId, newDate.getFullYear(), newMonth);
+      }
+    }
+  };
+
+  // 年選択時のハンドラー
+  const handleYearChange = async (year: string) => {
+    const newYear = parseInt(year);
+    if (!isNaN(newYear)) {
+      const newDate = new Date(currentDate);
+      newDate.setFullYear(newYear);
+      setCurrentDate(newDate);
+      
+      setMessageWithStability({ 
+        type: 'info', 
+        text: 'データを検索中です...',
+        position: 'center',
+        alignment: 'center',
+        persistent: true
+      });
+      
+      // 勤怠データ取得
+      fetchAttendanceData(newYear, newDate.getMonth() + 1);
+      
+      // 経費データ取得
+      const userInfoStr = sessionStorage.getItem('userProfile');
+      if (userInfoStr) {
+        const userProfile = JSON.parse(userInfoStr);
+        const userId = userProfile.id;
+        await fetchExpenseDataForDisplay(userId, newYear, newDate.getMonth() + 1);
+      }
+    }
+  };
+  
+  // 経費データ取得機能
+  const fetchExpenseDataForDisplay = async (userId: string, year: number, month: number) => {
+    try {
+      setIsLoading(true);
+      
+      const result = await fetchExpenseData(userId, year, month);
+      
+      if (result.success && result.data) {
+        console.log('取得した経費データ:', result.data);
+        
+        // 通勤費データを画面表示用に変換
+        const commuteExpenses = result.data.commuteExpenses.map(expense => ({
+          id: expense.id || uuidv4(),
+          date: expense.date,
+          transportation: expense.transportation,
+          from: expense.from,
+          to: expense.to,
+          type: expense.expenseType,
+          roundTrip: expense.roundTripType,
+          amount: expense.amount,
+          remarks: expense.remarks || '',
+          category: 'commute' as const
+        }));
+        
+        // 業務経費データを画面表示用に変換
+        const businessExpenses = result.data.businessExpenses.map(expense => ({
+          id: expense.id || uuidv4(),
+          date: expense.date,
+          transportation: expense.transportation,
+          from: expense.from,
+          to: expense.to,
+          type: expense.expenseType,
+          roundTrip: expense.roundTripType,
+          amount: expense.amount,
+          remarks: expense.remarks || '',
+          category: 'expense' as const
+        }));
+        
+        // 領収書データをそのまま設定
+        setReceipts(result.data.receipts);
+        
+        // 通勤費と業務経費を統合して画面に表示
+        setExpenses([...commuteExpenses, ...businessExpenses]);
+      } else {
+        console.error('経費データの取得に失敗しました:', result.error);
+        setMessageWithStability({
+          type: 'error',
+          text: `経費データの取得に失敗しました: ${result.error || '不明なエラー'}`,
+          position: 'top'
+        });
+      }
+    } catch (error) {
+      console.error('経費データ取得エラー:', error);
+      setMessageWithStability({
+        type: 'error',
+        text: `経費データの取得中にエラーが発生しました: ${error instanceof Error ? error.message : '不明なエラー'}`,
+        position: 'top'
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
   // 初期表示時のデータ取得
   useEffect(() => {
     if (userInfo?.id) {
       const year = currentDate.getFullYear()
       const month = currentDate.getMonth() + 1
       fetchAttendanceData(year, month)
+      fetchExpenseDataForDisplay(userInfo.id, year, month)
     }
   }, [userInfo, currentDate])
-
-  // 月選択時のハンドラー
-  const handleMonthChange = (month: string) => {
-    const newDate = new Date(currentDate)
-    newDate.setMonth(parseInt(month) - 1)
-    setCurrentDate(newDate)
-    setMessageWithStability({ 
-      type: 'info', 
-      text: '勤怠データを検索中です...',
-      position: 'center',
-      alignment: 'center',
-      persistent: true
-    });
-    fetchAttendanceData(newDate.getFullYear(), parseInt(month))
-  }
-
-  // 年選択時のハンドラー
-  const handleYearChange = (year: string) => {
-    const newDate = new Date(currentDate)
-    newDate.setFullYear(parseInt(year))
-    setCurrentDate(newDate)
-    setMessageWithStability({ 
-      type: 'info', 
-      text: '勤怠データを検索中です...',
-      position: 'center',
-      alignment: 'center',
-      persistent: true
-    });
-    fetchAttendanceData(parseInt(year), newDate.getMonth() + 1)
-  }
 
   // メッセージの自動消去
   useEffect(() => {
@@ -1123,8 +1225,11 @@ export default function AttendancePage() {
       return
     }
 
+    // カテゴリを明示的に保持
+    const currentCategory = newExpense.category || 'commute';
+
     const expense: ExpenseRecord = {
-      id: newExpense.id || Date.now().toString(),
+      id: newExpense.id || uuidv4(),
       date: newExpense.date,
       transportation: newExpense.transportation,
       from: newExpense.from,
@@ -1133,7 +1238,7 @@ export default function AttendancePage() {
       roundTrip: newExpense.roundTrip,
       amount: newExpense.amount,
       remarks: newExpense.remarks,
-      category: newExpense.category || 'commute'
+      category: currentCategory // 現在のカテゴリを正しく使用
     }
 
     if (newExpense.id) {
@@ -1143,7 +1248,20 @@ export default function AttendancePage() {
     }
 
     setIsAddingExpense(false)
-    setNewExpense({ category: 'commute' })
+    
+    // カテゴリだけでなく、他の必須フィールドも初期化
+    setNewExpense({
+      date: format(new Date(), 'yyyy/MM/dd'),
+      transportation: '',
+      from: '',
+      to: '',
+      type: '',
+      roundTrip: '',
+      amount: 0,
+      remarks: '',
+      category: currentCategory // 現在のカテゴリを維持
+    })
+    
     setExpenseValidationError(null)
     setHasUnsavedChanges(true)
   }
@@ -1156,22 +1274,96 @@ export default function AttendancePage() {
 
   // 保存処理
   const handleExpenseSave = async () => {
+    if (isSaving) return;
+    
     try {
-      // 保存処理の実装
-      setHasUnsavedChanges(false)
-      setMessageWithStability({ 
-        type: 'success', 
-        text: '経費データを保存しました',
-        position: 'bottom'
-      })
+      setIsSaving(true);
+      setSaveError(null);
+      setSaveSuccess(false);
+
+      // セッションストレージからユーザー情報を取得
+      const userInfoStr = sessionStorage.getItem('userProfile');
+      if (!userInfoStr) {
+        throw new Error('ユーザー情報が取得できませんでした');
+      }
+      
+      const userProfile = JSON.parse(userInfoStr);
+      const userId = userProfile.id;
+      const employeeId = userProfile.employee_id;
+      const branch = userProfile.branch_code;
+      
+      // 画面上のセレクトボックスから年月を取得
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth() + 1;
+
+      console.log('経費保存用ユーザー情報:', { userId, employeeId, branch, year, month });
+      console.log('保存する経費データ:', expenses);
+
+      // 通勤費と業務経費を分離
+      const commuteExpenses = expenses
+        .filter(expense => expense.category === 'commute')
+        .map(expense => ({
+          id: expense.id,
+          date: expense.date,
+          transportation: expense.transportation,
+          from: expense.from,
+          to: expense.to,
+          expenseType: expense.type,
+          roundTripType: expense.roundTrip,
+          amount: expense.amount,
+          remarks: expense.remarks || ''
+        }));
+      
+      const businessExpenses = expenses
+        .filter(expense => expense.category === 'expense')
+        .map(expense => ({
+          id: expense.id,
+          date: expense.date,
+          transportation: expense.transportation,
+          from: expense.from,
+          to: expense.to,
+          expenseType: expense.type,
+          roundTripType: expense.roundTrip,
+          amount: expense.amount,
+          remarks: expense.remarks || ''
+        }));
+
+      console.log('通勤費データ:', commuteExpenses.length, '件');
+      console.log('業務経費データ:', businessExpenses.length, '件');
+
+      // 保存するデータを準備
+      const expenseData = {
+        commuteExpenses,
+        businessExpenses,
+        receipts, 
+        employeeId, 
+        branch
+      };
+
+      // データの保存
+      const result = await saveExpenseData(userId, year, month, expenseData);
+      
+      if (result.success) {
+        setMessageWithStability({ 
+          type: 'success', 
+          text: '経費データを保存しました',
+          position: 'bottom'
+        });
+      } else {
+        throw new Error(result.error || '経費データの保存に失敗しました');
+      }
     } catch (error) {
+      console.error("経費データの保存に失敗しました", error);
       setMessageWithStability({ 
         type: 'error', 
-        text: '経費データの保存に失敗しました',
-        persistent: true
-      })
+        text: error instanceof Error ? error.message : '経費データの保存に失敗しました。もう一度お試しください。',
+        persistent: true,
+        position: 'top'
+      });
+    } finally {
+      setIsSaving(false);
     }
-  }
+  };
 
   // タブ切り替え時の処理
   const handleTabChange = (value: string) => {
@@ -1210,7 +1402,8 @@ export default function AttendancePage() {
         fileName: file.name,
         fileUrl: publicUrl,
         remarks: '',
-        uploadedAt: new Date().toISOString()
+        uploadedAt: new Date().toISOString(),
+        filePath: filePath
       }
 
       setReceipts([...receipts, newReceipt])
@@ -1689,9 +1882,22 @@ export default function AttendancePage() {
                 <Button
                   onClick={handleExpenseSave}
                   className="bg-blue-600 hover:bg-blue-700"
+                  disabled={isSaving}
                 >
-                  <Save className="h-4 w-4 mr-2" />
-                  保存
+                  {isSaving ? (
+                    <span className="flex items-center">
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      保存中...
+                    </span>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      保存
+                    </>
+                  )}
                 </Button>
               </div>
 
@@ -1919,11 +2125,18 @@ export default function AttendancePage() {
                           <label className="text-sm font-medium mb-1 block">発生日</label>
                           <Input
                             type="date"
-                            value={newExpense.date || ''}
+                            value={newExpense.date ? format(new Date(newExpense.date.replace(/\//g, '-')), 'yyyy-MM-dd') : ''}
                             onChange={(e) => {
-                              const date = new Date(e.target.value)
-                              const formattedDate = format(date, 'yyyy/MM/dd')
-                              setNewExpense({ ...newExpense, date: formattedDate })
+                              // 日付が選択されなかった場合は何もしない
+                              if (!e.target.value) return;
+                              // 日付文字列をそのまま使用（ブラウザが返すフォーマットはYYYY-MM-DD）
+                              // 表示用に変換
+                              const formattedDate = e.target.value.replace(/-/g, '/');
+                              setNewExpense({ ...newExpense, date: formattedDate });
+                              
+                              // デバッグ用
+                              console.log('Selected date:', e.target.value);
+                              console.log('Formatted date:', formattedDate);
                             }}
                             placeholder="YYYY/MM/DD"
                           />
@@ -2011,7 +2224,19 @@ export default function AttendancePage() {
                           variant="outline"
                           onClick={() => {
                             setIsAddingExpense(false)
-                            setNewExpense({ category: 'commute' })
+                            // カテゴリを維持しつつリセット
+                            const currentCategory = newExpense.category || 'commute';
+                            setNewExpense({
+                              date: format(new Date(), 'yyyy/MM/dd'),
+                              transportation: '',
+                              from: '',
+                              to: '',
+                              type: '',
+                              roundTrip: '',
+                              amount: 0,
+                              remarks: '',
+                              category: currentCategory
+                            })
                           }}
                         >
                           キャンセル
@@ -2191,12 +2416,14 @@ export default function AttendancePage() {
                         <Button
                           onClick={() => {
                             if (newReceipt?.fileUrl && newReceipt?.fileName) {
+                              const filePath = newReceipt.fileUrl.split('?')[0].split('/').slice(-1)[0];
                               const receipt: ReceiptRecord = {
-                                id: newReceipt.id || Date.now().toString(),
+                                id: Date.now().toString(),
                                 fileName: newReceipt.fileName,
                                 fileUrl: newReceipt.fileUrl,
+                                filePath: filePath,
                                 remarks: newReceipt.remarks || '',
-                                uploadedAt: newReceipt.uploadedAt || new Date().toISOString()
+                                uploadedAt: new Date().toISOString()
                               }
                               setReceipts([...receipts, receipt])
                               setShowReceiptInput(false)
@@ -2204,6 +2431,7 @@ export default function AttendancePage() {
                                 id: Date.now().toString(),
                                 fileName: '',
                                 fileUrl: '',
+                                filePath: '',
                                 remarks: '',
                                 uploadedAt: new Date().toISOString()
                               })
@@ -2266,6 +2494,23 @@ export default function AttendancePage() {
                   </motion.div>
                 </AnimatePresence>
               )}
+
+              {/* 保存ボタンエリア */}
+              <div className="flex justify-end mt-6 mb-4">
+                <div className="flex items-center gap-4">
+                  {saveError && (
+                    <div className="flex items-center text-red-500">
+                      <AlertTriangle className="h-4 w-4 mr-2" />
+                      <span className="text-sm">{saveError}</span>
+                    </div>
+                  )}
+                  {saveSuccess && (
+                    <div className="flex items-center text-green-500">
+                      <span className="text-sm">保存が完了しました</span>
+                    </div>
+                  )}
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
