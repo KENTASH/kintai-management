@@ -2,14 +2,17 @@
 
 import { useState, useMemo, useEffect } from "react"
 import React from 'react'
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, parse, differenceInMinutes } from "date-fns"
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, parse, differenceInMinutes, isWeekend } from "date-fns"
 import { ja } from "date-fns/locale/ja"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Clock, Save, AlertCircle, CheckCircle2, Info, X, CheckSquare, Edit } from "lucide-react"
+import { Clock, Save, AlertCircle, CheckCircle2, Info, X, CheckSquare, Edit, 
+  Calendar, Building2, User, Briefcase, CalendarCheck, CalendarX, 
+  Clock4, Timer, CalendarClock, CalendarDays, AlertTriangle, 
+  CheckCircle, XCircle, ArrowLeftRight, CalendarPlus } from "lucide-react"
 import { useI18n } from "@/lib/i18n/context"
 import { supabase } from '@/lib/supabaseClient'
 import { AnimatePresence, motion } from "framer-motion"
@@ -151,6 +154,7 @@ export default function AttendancePage() {
   }>({})
   const [branchInfo, setBranchInfo] = useState<{ name: string; code: string } | null>(null)
   const [status, setStatus] = useState<string>("00")
+  const [errorDates, setErrorDates] = useState<Set<string>>(new Set())
 
   const monthStart = startOfMonth(currentDate)
   const monthEnd = endOfMonth(currentDate)
@@ -479,10 +483,10 @@ export default function AttendancePage() {
     // 現在のステータスに応じて次のステータスを設定
     switch (status) {
       case '00': // 下書きから申請中へ
-        setStatus('10');
+        setStatus('01');
         break;
-      case '30': // 差戻しから申請中へ
-        setStatus('10');
+      case '03': // 差戻しから申請中へ
+        setStatus('01');
         break;
       default:
         // その他のステータスは変更しない
@@ -491,23 +495,64 @@ export default function AttendancePage() {
   }
 
   // ステータスを下書きに戻す関数
-  const moveToEditStatus = () => {
-    setStatus('00');
-    setMessageWithStability({ 
-      type: 'success', 
-      text: '再編集モードに変更しました',
-      position: 'bottom'
-    });
+  const moveToEditStatus = async () => {
+    try {
+      // データベースのステータスを更新
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth() + 1;
+
+      const { data: existingHeader, error: headerError } = await supabase
+        .from('attendance_headers')
+        .select('*')
+        .eq('user_id', userInfo?.id)
+        .eq('year', year)
+        .eq('month', month)
+        .single();
+
+      if (headerError && headerError.code !== 'PGRST116') {
+        throw new Error('ヘッダーデータの取得に失敗しました');
+      }
+
+      if (existingHeader) {
+        const { error: updateError } = await supabase
+          .from('attendance_headers')
+          .update({
+            status: '00',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingHeader.id);
+
+        if (updateError) {
+          throw new Error('ステータスの更新に失敗しました');
+        }
+      }
+
+      // 画面のステータスを更新
+      setStatus('00');
+      setMessageWithStability({ 
+        type: 'success', 
+        text: '再編集モードに変更しました',
+        position: 'bottom'
+      });
+    } catch (error) {
+      console.error('再編集モードへの切り替えでエラーが発生しました:', error);
+      setMessageWithStability({ 
+        type: 'error', 
+        text: '再編集モードへの切り替えに失敗しました',
+        persistent: true
+      });
+    }
   }
 
   // 編集可能かどうかを判定する関数
   const isEditable = () => {
-    return status === '00' || status === '30';
+    return status === '00' || status === '03';
   }
 
-  // チェック処理を行う関数
+  // チェックボタンの処理
   const handleCheck = async () => {
     if (!userInfo?.id || !branchInfo?.code) {
+      console.error('チェックエラー: ユーザー情報または所属情報が不足しています', { userInfo, branchInfo });
       setMessageWithStability({ 
         type: 'error', 
         text: 'ユーザー情報または所属情報が取得できません。再ログインしてください。',
@@ -516,12 +561,13 @@ export default function AttendancePage() {
       return;
     }
 
-    // 保存ボタンと同様のバリデーション処理を実行
+    // バリデーションエラーメッセージを格納する配列
     const validationErrors: string[] = [];
+    const newErrorDates = new Set<string>();
 
-    // 時刻形式のバリデーションチェック
+    // 入力データのバリデーションチェック
     Object.entries(attendanceData).forEach(([date, data]) => {
-      const { startTime, endTime } = data;
+      const { startTime, endTime, breakTime, remarks, type, lateEarlyHours } = data;
       const dateDisplay = format(new Date(date), 'M/d');
 
       // 時刻形式のバリデーション（HH:MM形式かどうか）
@@ -530,11 +576,13 @@ export default function AttendancePage() {
       // 開始時間のチェック
       if (startTime && !timePattern.test(startTime)) {
         validationErrors.push(`${dateDisplay}の開始時間「${startTime}」が正しい形式（HH:MM）ではありません。`);
+        newErrorDates.add(date);
       }
       
       // 終了時間のチェック
       if (endTime && !timePattern.test(endTime)) {
         validationErrors.push(`${dateDisplay}の終了時間「${endTime}」が正しい形式（HH:MM）ではありません。`);
+        newErrorDates.add(date);
       }
       
       // 開始時間と終了時間の逆転チェック
@@ -544,56 +592,22 @@ export default function AttendancePage() {
         
         if (end < start) {
           validationErrors.push(`${dateDisplay}の終了時間（${endTime}）が開始時間（${startTime}）より前になっています。`);
+          newErrorDates.add(date);
+        }
+      }
+
+      // 入力項目がある場合の必須チェック
+      if (startTime || endTime || breakTime || remarks || type !== 'none' || lateEarlyHours) {
+        if (!startTime || !endTime || !breakTime || !remarks) {
+          validationErrors.push(`${dateDisplay}の入力が不完全です。全ての項目を入力してください。`);
+          newErrorDates.add(date);
         }
       }
     });
 
-    // チェックボタン固有のバリデーション処理
-    const weekdays: string[] = [];
-    
-    // 平日の日付を収集
-    days.forEach(day => {
-      // 土日以外を平日とする
-      if (![0, 6].includes(day.getDay())) {
-        weekdays.push(format(day, 'yyyy-MM-dd'));
-      }
-    });
+    // エラー日付を更新
+    setErrorDates(newErrorDates);
 
-    // 各日付の入力チェック
-    Object.entries(attendanceData).forEach(([date, data]) => {
-      const { startTime, endTime, breakTime, remarks, type, lateEarlyHours } = data;
-      const dateDisplay = format(new Date(date), 'M/d');
-      
-      // 1. 開始時間、終了時間、休憩時間、備考のいずれか１つ以上が入力されていて且つ４つの項目がすべて入力されていない場合
-      const hasAnyInput = startTime || endTime || breakTime || remarks;
-      const hasAllInputs = startTime && endTime && breakTime && remarks;
-      
-      if (hasAnyInput && !hasAllInputs) {
-        validationErrors.push(`${dateDisplay}の開始時間、終了時間、休憩時間、備考は必須入力です`);
-      }
-      
-      // 2. 勤怠区分または遅刻・早退時間が入力されていて開始時間、終了時間、休憩時間、備考に１つでも未入力があった場合
-      const hasTypeOrLateEarly = (type && type !== 'none') || lateEarlyHours;
-      
-      if (hasTypeOrLateEarly && !hasAllInputs) {
-        validationErrors.push(`${dateDisplay}の開始時間、終了時間、休憩時間、備考は必須入力です`);
-      }
-      
-      // 入力がある日付を平日リストから削除
-      if (hasAnyInput) {
-        const index = weekdays.indexOf(date);
-        if (index !== -1) {
-          weekdays.splice(index, 1);
-        }
-      }
-    });
-    
-    // 3. 平日なのにも関わらず入力欄が１つも入力されていない日付があるかチェック
-    weekdays.forEach(date => {
-      const dateDisplay = format(new Date(date), 'M/d');
-      validationErrors.push(`${dateDisplay}の勤務実績が入力されていません。`);
-    });
-    
     // バリデーションエラーがある場合は処理を中断
     if (validationErrors.length > 0) {
       setMessageWithStability({ 
@@ -604,30 +618,25 @@ export default function AttendancePage() {
       });
       return;
     }
-    
+
     try {
-      // データベースに保存（保存ボタンと同じ処理）
-      await handleSaveData();
+      // データベースに保存（チェックボタン用のパラメータをtrueで渡す）
+      await handleSaveData(true);
       
-      // 保存成功後、ステータスを更新（チェックボタン特有の処理）
-      setStatus('10');
+      // 保存成功時にエラー表示をクリア
+      setErrorDates(new Set<string>());
       
       // 成功メッセージを表示
       setMessageWithStability({ 
         type: 'success', 
-        text: 'チェックが完了し、データを保存しました。ステータスを更新しました。',
+        text: 'チェックが完了し、申請中ステータスに更新しました。',
         position: 'bottom'
       });
-      
-      // 保存後にデータを再取得
-      const year = currentDate.getFullYear();
-      const month = currentDate.getMonth() + 1;
-      await fetchAttendanceData(year, month);
     } catch (error) {
-      console.error('保存処理でエラーが発生しました:', error);
+      console.error('チェック処理でエラーが発生しました:', error);
       setMessageWithStability({ 
         type: 'error', 
-        text: error instanceof Error ? error.message : '勤怠データの保存に失敗しました',
+        text: error instanceof Error ? error.message : 'チェック処理に失敗しました',
         persistent: true,
         position: 'top'
       });
@@ -635,197 +644,123 @@ export default function AttendancePage() {
   }
 
   // 保存処理のロジックを分離
-  const handleSaveData = async () => {
+  const handleSaveData = async (isCheck: boolean = false) => {
     if (!userInfo?.id || !branchInfo?.code) {
       console.error('保存エラー: ユーザー情報または所属情報が不足しています', { userInfo, branchInfo });
-      throw new Error('ユーザー情報または所属情報が取得できません。再ログインしてください。');
+      setMessageWithStability({ 
+        type: 'error', 
+        text: 'ユーザー情報または所属情報が取得できません。再ログインしてください。',
+        persistent: true
+      });
+      return;
     }
 
-    setIsSaving(true);
-    setMessageWithStability(null);
-
     try {
+      // 保存対象の年月を取得
       const year = currentDate.getFullYear();
       const month = currentDate.getMonth() + 1;
 
-      console.log('勤怠データを保存します:', { 
-        year, 
-        month, 
-        userId: userInfo.id,
-        employeeId: userInfo.employee_id,
-        branchCode: branchInfo.code,
-        status: status // ステータスをログに出力
-      });
+      // ヘッダーデータの保存
+      const headerData = {
+        user_id: userInfo.id,
+        year: year,
+        month: month,
+        branch_code: branchInfo.code,
+        status: isCheck ? '01' : '00', // チェックボタンの場合は01、それ以外は00
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
 
-      // 1. 勤怠ヘッダーを作成または更新
-      const { data: existingHeader, error: fetchError } = await supabase
+      // 既存のヘッダーデータを確認
+      const { data: existingHeader, error: headerError } = await supabase
         .from('attendance_headers')
-        .select('id')
+        .select('*')
         .eq('user_id', userInfo.id)
         .eq('year', year)
         .eq('month', month)
-        .maybeSingle();
+        .single();
 
-      if (fetchError) {
-        console.error('既存ヘッダー取得エラー:', fetchError);
-        throw new Error('勤怠ヘッダーの取得に失敗しました');
+      if (headerError && headerError.code !== 'PGRST116') {
+        console.error('ヘッダーデータの取得エラー:', headerError);
+        throw new Error('ヘッダーデータの取得に失敗しました');
       }
 
-      // サマリーデータを計算
-      const headerData = {
-        user_id: userInfo.id,
-        employee_id: userInfo.employee_id,
-        branch: branchInfo.code,  // branch_code を使用
-        year,
-        month,
-        workplace,
-        status: status, // 現在のステータスを使用
-        total_working_days: summary.totalWorkDays,
-        holiday_working_days: summary.holidayWorkDays,
-        absence_days: summary.absenceDays,
-        total_working_hours: parseFloat(summary.totalWorkTime),
-        late_early_hours: parseFloat(summary.lateEarlyHours),
-        paid_leave_days: summary.paidLeaveDays,
-        updated_at: new Date().toISOString(),
-        updated_by: userInfo.id
-      };
-
-      console.log('保存するヘッダーデータ:', headerData);
-
-      let headerId: string | undefined;
+      let headerId: string;
       if (existingHeader) {
-        console.log('既存ヘッダーを更新します:', existingHeader.id);
-        // 既存のヘッダーを更新
+        // 既存のヘッダーデータを更新
         const { error: updateError } = await supabase
           .from('attendance_headers')
-          .update(headerData)
+          .update({
+            status: isCheck ? '01' : '00', // チェックボタンの場合は01、それ以外は00
+            updated_at: new Date().toISOString()
+          })
           .eq('id', existingHeader.id);
 
         if (updateError) {
-          console.error('ヘッダー更新エラー:', updateError);
-          throw new Error('勤怠ヘッダーの更新に失敗しました');
+          console.error('ヘッダーデータの更新エラー:', updateError);
+          throw new Error('ヘッダーデータの更新に失敗しました');
         }
         headerId = existingHeader.id;
       } else {
-        console.log('新規ヘッダーを作成します');
-        // 新規ヘッダーを作成
+        // 新規ヘッダーデータを作成
         const { data: newHeader, error: insertError } = await supabase
           .from('attendance_headers')
-          .insert({
-            ...headerData,
-            created_at: new Date().toISOString(),
-            created_by: userInfo.id
-          })
-          .select('id')
+          .insert([headerData])
+          .select()
           .single();
 
         if (insertError) {
-          console.error('ヘッダー作成エラー:', insertError);
-          throw new Error(`勤怠ヘッダーの作成に失敗しました: ${insertError.message}`);
+          console.error('ヘッダーデータの作成エラー:', insertError);
+          throw new Error('ヘッダーデータの作成に失敗しました');
         }
-        
-        if (!newHeader || !newHeader.id) {
-          console.error('ヘッダー作成後のIDが取得できませんでした');
-          throw new Error('勤怠ヘッダーの作成に失敗しました: IDが取得できません');
-        }
-        
         headerId = newHeader.id;
       }
 
-      console.log('ヘッダーの保存に成功しました:', headerId);
+      // 詳細データの保存
+      const detailData = Object.entries(attendanceData).map(([date, data]) => ({
+        header_id: headerId,
+        date: date,
+        start_time: data.startTime || null,
+        end_time: data.endTime || null,
+        break_time: convertBreakTimeToMinutes(data.breakTime),
+        remarks: data.remarks || null,
+        work_type_code: data.type === 'none' ? '01' : convertTypeToCode(data.type),
+        late_early_hours: data.lateEarlyHours ? parseFloat(data.lateEarlyHours) : null,
+        actual_working_hours: convertTimeToHours(data.actualTime),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        created_by: userInfo.id,
+        updated_by: userInfo.id
+      }));
 
-      // 2. 既存の勤怠詳細を削除（一旦全削除して再作成）
-      if (!headerId) {
-        console.error('ヘッダーIDが不明なため、詳細データを保存できません');
-        throw new Error('勤怠ヘッダーIDが取得できないため、詳細を保存できません');
-      }
-      
+      // 既存の詳細データを削除
       const { error: deleteError } = await supabase
         .from('attendance_details')
         .delete()
         .eq('header_id', headerId);
 
       if (deleteError) {
-        console.error('既存詳細削除エラー:', deleteError);
-        throw new Error('既存の勤怠詳細の削除に失敗しました');
+        console.error('詳細データの削除エラー:', deleteError);
+        throw new Error('詳細データの削除に失敗しました');
       }
 
-      // 3. 勤怠詳細を作成
-      const detailsData = Object.entries(attendanceData)
-        .filter(([_, data]) => 
-          // 入力されているデータのみを対象とする
-          data.startTime || data.endTime || data.type !== 'none' || data.remarks
-        )
-        .map(([date, data]) => {
-          // 勤務形態コードをマッピング
-          let workTypeCode = '01'; // デフォルトは通常勤務
-          switch (data.type) {
-            case 'holiday-work': workTypeCode = '02'; break;
-            case 'paid-leave': workTypeCode = '03'; break;
-            case 'am-leave': workTypeCode = '04'; break;
-            case 'pm-leave': workTypeCode = '05'; break;
-            case 'special-leave': workTypeCode = '06'; break;
-            case 'compensatory-leave': workTypeCode = '07'; break;
-            case 'compensatory-leave-planned': workTypeCode = '08'; break;
-            case 'absence': workTypeCode = '09'; break;
-            case 'late': workTypeCode = '10'; break;
-            case 'early-leave': workTypeCode = '11'; break;
-            case 'delay': workTypeCode = '12'; break;
-            case 'shift': workTypeCode = '13'; break;
-            case 'business-holiday': workTypeCode = '14'; break;
-          }
+      // 新規詳細データを作成
+      const { error: insertError } = await supabase
+        .from('attendance_details')
+        .insert(detailData);
 
-          // 実労働時間を計算
-          let actualWorkingHours = 0;
-          if (data.actualTime) {
-            const [hours, minutes] = data.actualTime.split(':').map(Number);
-            actualWorkingHours = hours + (minutes / 60);
-          }
-
-          // 休憩時間を分単位に変換
-          let breakTimeMinutes = 0;
-          if (data.breakTime) {
-            const [hours, minutes] = data.breakTime.split(':').map(Number);
-            breakTimeMinutes = (hours * 60) + minutes;
-          }
-
-          // 遅刻・早退時間は入力がある場合のみ数値に変換
-          const lateEarlyHours = data.lateEarlyHours ? parseFloat(data.lateEarlyHours) : null;
-
-          return {
-            header_id: headerId,
-            date,
-            start_time: data.startTime || null,
-            end_time: data.endTime || null,
-            break_time: breakTimeMinutes,
-            actual_working_hours: actualWorkingHours,
-            work_type_code: workTypeCode,
-            late_early_hours: lateEarlyHours,
-            remarks: data.remarks || '',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            created_by: userInfo.id,
-            updated_by: userInfo.id
-          };
-        });
-
-      console.log(`保存する詳細データ: ${detailsData.length}件`);
-
-      if (detailsData.length > 0) {
-        const { error: insertDetailsError } = await supabase
-          .from('attendance_details')
-          .insert(detailsData);
-
-        if (insertDetailsError) {
-          console.error('詳細データ保存エラー:', insertDetailsError);
-          throw new Error('勤怠詳細の保存に失敗しました');
-        }
+      if (insertError) {
+        console.error('詳細データの作成エラー:', insertError);
+        throw new Error('詳細データの作成に失敗しました');
       }
 
-      console.log('詳細データの保存に成功しました');
+      // ステータスを更新
+      setStatus(isCheck ? '01' : '00');
+
       return true;
-    } finally {
-      setIsSaving(false);
+    } catch (error) {
+      console.error('保存処理でエラーが発生しました:', error);
+      throw error;
     }
   }
 
@@ -843,6 +778,7 @@ export default function AttendancePage() {
 
     // バリデーションエラーメッセージを格納する配列
     const validationErrors: string[] = [];
+    const newErrorDates = new Set<string>();
 
     // 入力データのバリデーションチェック
     Object.entries(attendanceData).forEach(([date, data]) => {
@@ -855,11 +791,13 @@ export default function AttendancePage() {
       // 開始時間のチェック
       if (startTime && !timePattern.test(startTime)) {
         validationErrors.push(`${dateDisplay}の開始時間「${startTime}」が正しい形式（HH:MM）ではありません。`);
+        newErrorDates.add(date);
       }
       
       // 終了時間のチェック
       if (endTime && !timePattern.test(endTime)) {
         validationErrors.push(`${dateDisplay}の終了時間「${endTime}」が正しい形式（HH:MM）ではありません。`);
+        newErrorDates.add(date);
       }
       
       // 開始時間と終了時間の逆転チェック
@@ -869,9 +807,13 @@ export default function AttendancePage() {
         
         if (end < start) {
           validationErrors.push(`${dateDisplay}の終了時間（${endTime}）が開始時間（${startTime}）より前になっています。`);
+          newErrorDates.add(date);
         }
       }
     });
+
+    // エラー日付を更新
+    setErrorDates(newErrorDates);
 
     // バリデーションエラーがある場合は処理を中断
     if (validationErrors.length > 0) {
@@ -887,6 +829,9 @@ export default function AttendancePage() {
 
     try {
       await handleSaveData();
+      
+      // 保存成功時にエラー表示をクリア
+      setErrorDates(new Set<string>());
       
       // 保存後にデータを再取得
       const year = currentDate.getFullYear();
@@ -914,10 +859,9 @@ export default function AttendancePage() {
   const getStatusName = (statusCode: string): string => {
     switch (statusCode) {
       case '00': return '下書き';
-      case '10': return '申請中';
-      case '20': return '承認済';
-      case '30': return '差戻し';
-      case '40': return '却下';
+      case '01': return '申請中';
+      case '02': return '承認済';
+      case '03': return '差戻し';
       default: return '下書き';
     }
   }
@@ -987,7 +931,7 @@ export default function AttendancePage() {
         <AnimatePresence mode="wait">
           {message && (
             <motion.div
-              key={message.text} // キーを追加してアニメーションを強制
+              key={message.text}
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
@@ -1005,7 +949,7 @@ export default function AttendancePage() {
             >
               {icons[message.type]}
               <span className="text-sm font-medium whitespace-pre-line">{formattedMessage}</span>
-              {message.dismissible && (
+              {(message.type === 'error' || message.dismissible) && (
                 <button
                   onClick={handleCloseMessage}
                   className="p-1 hover:bg-gray-100 rounded-full ml-2"
@@ -1018,6 +962,62 @@ export default function AttendancePage() {
         </AnimatePresence>
       </div>
     )
+  }
+
+  // 画面上の勤務形態を、データベースの勤務形態コードに変換する関数を追加
+  const convertTypeToCode = (type: string): string => {
+    switch (type) {
+      case 'none': return '01';
+      case 'holiday-work': return '02';
+      case 'paid-leave': return '03';
+      case 'am-leave': return '04';
+      case 'pm-leave': return '05';
+      case 'special-leave': return '06';
+      case 'compensatory-leave': return '07';
+      case 'compensatory-leave-planned': return '08';
+      case 'absence': return '09';
+      case 'late': return '10';
+      case 'early-leave': return '11';
+      case 'delay': return '12';
+      case 'shift': return '13';
+      case 'business-holiday': return '14';
+      default: return '01';
+    }
+  };
+
+  // 休憩時間を分単位に変換する関数を追加
+  const convertBreakTimeToMinutes = (breakTime: string): number | null => {
+    if (!breakTime) return null;
+    
+    // 時刻形式のバリデーション（HH:MM形式かどうか）
+    const timePattern = /^([0-1][0-9]|2[0-3]):([0-5][0-9])$/;
+    if (!timePattern.test(breakTime)) return null;
+    
+    const [hours, minutes] = breakTime.split(':').map(Number);
+    return (hours * 60) + minutes;
+  };
+
+  // 時間（HH:MM形式）を小数時間に変換する関数
+  const convertTimeToHours = (timeString: string): number | null => {
+    if (!timeString) return null;
+    
+    // 時刻形式のバリデーション（HH:MM形式かどうか）
+    const timePattern = /^([0-1][0-9]|2[0-3]):([0-5][0-9])$/;
+    if (!timePattern.test(timeString)) return null;
+    
+    const [hours, minutes] = timeString.split(':').map(Number);
+    return hours + (minutes / 60);
+  };
+
+  // ステータスアイコンを取得する関数を追加
+  const getStatusIcon = (statusCode: string) => {
+    switch (statusCode) {
+      case '00': return <Calendar className="h-4 w-4 text-gray-500" />;
+      case '01': return <CheckCircle className="h-4 w-4 text-blue-500" />;
+      case '02': return <CheckCircle2 className="h-4 w-4 text-green-500" />;
+      case '03': return <AlertTriangle className="h-4 w-4 text-amber-500" />;
+      default: return <Calendar className="h-4 w-4 text-gray-500" />;
+    }
   }
 
   return (
@@ -1113,7 +1113,8 @@ export default function AttendancePage() {
                     </div>
                     <div>
                       <div className="text-sm text-muted-foreground">ステータス</div>
-                      <div className="font-medium">
+                      <div className="font-medium flex items-center gap-1">
+                        {getStatusIcon(status)}
                         {getStatusName(status)}
                       </div>
                     </div>
@@ -1165,47 +1166,92 @@ export default function AttendancePage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-7 gap-x-4 mb-6">
-                <div className="flex justify-between gap-2">
-                  <span className="text-muted-foreground">{t("total-work-days")}:</span>
+              <div className="grid grid-cols-7 gap-x-4 mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <div className="flex justify-between items-center gap-2">
+                  <span className="text-muted-foreground flex items-center gap-1">
+                    <CalendarDays className="h-4 w-4" />
+                    {t("total-work-days")}:
+                  </span>
                   <span className="font-medium">{summary.totalWorkDays}{t("days-suffix")}</span>
                 </div>
-                <div className="flex justify-between gap-2">
-                  <span className="text-muted-foreground">{t("regular-work-days")}:</span>
+                <div className="flex justify-between items-center gap-2">
+                  <span className="text-muted-foreground flex items-center gap-1">
+                    <Briefcase className="h-4 w-4" />
+                    {t("regular-work-days")}:
+                  </span>
                   <span className="font-medium">{summary.regularWorkDays}{t("days-suffix")}</span>
                 </div>
-                <div className="flex justify-between gap-2">
-                  <span className="text-muted-foreground">{t("holiday-work-days")}:</span>
+                <div className="flex justify-between items-center gap-2">
+                  <span className="text-muted-foreground flex items-center gap-1">
+                    <CalendarPlus className="h-4 w-4" />
+                    {t("holiday-work-days")}:
+                  </span>
                   <span className="font-medium">{summary.holidayWorkDays}{t("days-suffix")}</span>
                 </div>
-                <div className="flex justify-between gap-2">
-                  <span className="text-muted-foreground">{t("absence-days")}:</span>
+                <div className="flex justify-between items-center gap-2">
+                  <span className="text-muted-foreground flex items-center gap-1">
+                    <CalendarX className="h-4 w-4" />
+                    {t("absence-days")}:
+                  </span>
                   <span className="font-medium">{summary.absenceDays}{t("days-suffix")}</span>
                 </div>
-                <div className="flex justify-between gap-2">
-                  <span className="text-muted-foreground">{t("total-work-time")}:</span>
+                <div className="flex justify-between items-center gap-2">
+                  <span className="text-muted-foreground flex items-center gap-1">
+                    <Clock4 className="h-4 w-4" />
+                    {t("total-work-time")}:
+                  </span>
                   <span className="font-medium">{summary.totalWorkTime}{t("hours")}</span>
                 </div>
-                <div className="flex justify-between gap-2">
-                  <span className="text-muted-foreground">{t("late-early-hours")}:</span>
+                <div className="flex justify-between items-center gap-2">
+                  <span className="text-muted-foreground flex items-center gap-1">
+                    <ArrowLeftRight className="h-4 w-4" />
+                    {t("late-early-hours")}:
+                  </span>
                   <span className="font-medium">{summary.lateEarlyHours}{t("hours")}</span>
                 </div>
-                <div className="flex justify-between gap-2">
-                  <span className="text-muted-foreground">{t("paid-leave-days")}:</span>
+                <div className="flex justify-between items-center gap-2">
+                  <span className="text-muted-foreground flex items-center gap-1">
+                    <CalendarCheck className="h-4 w-4" />
+                    {t("paid-leave-days")}:
+                  </span>
                   <span className="font-medium">{summary.paidLeaveDays}{t("days-suffix")}</span>
                 </div>
               </div>
 
               <div className="border rounded-lg border-gray-300 shadow-sm">
-                <div className="grid grid-cols-12 gap-2 p-2 bg-blue-50 dark:bg-gray-800 rounded-t-lg text-sm border-b border-gray-300">
-                  <div className="col-span-1 text-gray-500 font-medium">{t("date")}</div>
-                  <div className="col-span-1 text-gray-500 font-medium">{t("start-time")}</div>
-                  <div className="col-span-1 text-gray-500 font-medium">{t("end-time")}</div>
-                  <div className="col-span-1 text-gray-500 font-medium">{t("break-time")}</div>
-                  <div className="col-span-1 text-gray-500 font-medium">{t("actual-time")}</div>
-                  <div className="col-span-2 text-gray-500 font-medium">{t("attendance-type")}</div>
-                  <div className="col-span-4 text-gray-500 font-medium">{t("remarks")}</div>
-                  <div className="col-span-1 text-gray-500 font-medium">{t("late-early-hours")}</div>
+                <div className="grid grid-cols-12 gap-0 p-2 bg-blue-50 dark:bg-gray-800 rounded-t-lg text-sm border-b border-gray-300">
+                  <div className="col-span-1 text-gray-500 font-medium flex items-center gap-1 px-6">
+                    <Calendar className="h-4 w-4" />
+                    {t("date")}
+                  </div>
+                  <div className="col-span-1 text-gray-500 font-medium flex items-center gap-1">
+                    <Clock className="h-4 w-4" />
+                    {t("start-time")}
+                  </div>
+                  <div className="col-span-1 text-gray-500 font-medium flex items-center gap-1">
+                    <Clock className="h-4 w-4" />
+                    {t("end-time")}
+                  </div>
+                  <div className="col-span-1 text-gray-500 font-medium flex items-center gap-1">
+                    <Timer className="h-4 w-4" />
+                    {t("break-time")}
+                  </div>
+                  <div className="col-span-1 text-gray-500 font-medium flex items-center gap-1">
+                    <CalendarClock className="h-4 w-4" />
+                    {t("actual-time")}
+                  </div>
+                  <div className="col-span-2 text-gray-500 font-medium flex items-center gap-1">
+                    <Briefcase className="h-4 w-4" />
+                    {t("attendance-type")}
+                  </div>
+                  <div className="col-span-4 text-gray-500 font-medium flex items-center gap-1">
+                    <Info className="h-4 w-4" />
+                    {t("remarks")}
+                  </div>
+                  <div className="col-span-1 text-gray-500 font-medium flex items-center gap-1">
+                    <ArrowLeftRight className="h-4 w-4" />
+                    {t("late-early-hours")}
+                  </div>
                 </div>
 
                 <div className="divide-y divide-gray-300">
@@ -1213,26 +1259,23 @@ export default function AttendancePage() {
                     const dateKey = format(day, 'yyyy-MM-dd')
                     const dayOfWeek = format(day, 'E', { locale: ja })
                     const isWeekend = [0, 6].includes(day.getDay())
-                    const isHoliday = attendanceData[dateKey]?.type === 'holiday-work' || 
-                                      attendanceData[dateKey]?.type === 'paid-leave' || 
-                                      attendanceData[dateKey]?.type === 'special-leave' ||
-                                      attendanceData[dateKey]?.type === 'compensatory-leave'
+                    const hasError = errorDates?.has(dateKey)
 
                     return (
                       <div
                         key={dateKey}
-                        className={`grid grid-cols-12 gap-2 p-2 items-center ${
-                          isWeekend 
-                            ? 'bg-gray-200 dark:bg-gray-700' 
-                            : isHoliday 
-                              ? 'bg-gray-100 dark:bg-gray-800'
-                              : 'hover:bg-gray-50 dark:hover:bg-gray-800'
+                        className={`grid grid-cols-12 gap-0 items-center px-4 py-1.5 ${
+                          hasError 
+                            ? 'bg-yellow-50 dark:bg-yellow-900/20' 
+                            : isWeekend 
+                              ? 'bg-gray-50 dark:bg-gray-800/50' 
+                              : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
                         }`}
                       >
-                        <div className="col-span-1 text-sm font-medium">
+                        <div className={`col-span-1 text-sm font-medium px-6 ${isEditable() ? 'py-1.5' : 'py-1'}`}>
                           {format(day, 'M/d')}({dayOfWeek})
                         </div>
-                        <div className="col-span-1">
+                        <div className="col-span-1 px-2">
                           {isEditable() ? (
                           <Input
                             type="text"
@@ -1244,12 +1287,12 @@ export default function AttendancePage() {
                               className="h-8 text-center placeholder:text-gray-300 border-[#d1d5db] border-opacity-85"
                           />
                           ) : (
-                            <div className="h-8 flex items-center justify-center font-medium">
+                            <div className="h-7 flex items-center justify-center font-medium text-sm">
                               {attendanceData[dateKey]?.startTime || ""}
                             </div>
                           )}
                         </div>
-                        <div className="col-span-1">
+                        <div className="col-span-1 px-2">
                           {isEditable() ? (
                           <Input
                             type="text"
@@ -1261,12 +1304,12 @@ export default function AttendancePage() {
                               className="h-8 text-center placeholder:text-gray-300 border-[#d1d5db] border-opacity-85"
                           />
                           ) : (
-                            <div className="h-8 flex items-center justify-center font-medium">
+                            <div className="h-7 flex items-center justify-center font-medium text-sm">
                               {attendanceData[dateKey]?.endTime || ""}
                             </div>
                           )}
                         </div>
-                        <div className="col-span-1">
+                        <div className="col-span-1 px-2">
                           {isEditable() ? (
                           <Input
                             type="text"
@@ -1278,17 +1321,17 @@ export default function AttendancePage() {
                               className="h-8 text-center placeholder:text-gray-300 border-[#d1d5db] border-opacity-85"
                           />
                           ) : (
-                            <div className="h-8 flex items-center justify-center font-medium">
+                            <div className="h-7 flex items-center justify-center font-medium text-sm">
                               {attendanceData[dateKey]?.breakTime || ""}
                             </div>
                           )}
                         </div>
-                        <div className="col-span-1">
-                          <div className="h-8 flex items-center justify-center font-medium">
+                        <div className="col-span-1 px-2">
+                          <div className={`flex items-center justify-center font-medium text-sm ${isEditable() ? 'h-8' : 'h-7'}`}>
                             {attendanceData[dateKey]?.actualTime || ""}
                           </div>
                         </div>
-                        <div className="col-span-2">
+                        <div className="col-span-2 px-2">
                           {isEditable() ? (
                           <Select
                             onValueChange={(value) => handleTimeChange(day, 'type', value)}
@@ -1298,24 +1341,24 @@ export default function AttendancePage() {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="none" className="h-8"></SelectItem>
-                              <SelectItem value="holiday-work" className="h-8">休出</SelectItem>
-                              <SelectItem value="paid-leave" className="h-8">有休</SelectItem>
-                              <SelectItem value="am-leave" className="h-8">前休</SelectItem>
-                              <SelectItem value="pm-leave" className="h-8">後休</SelectItem>
-                              <SelectItem value="special-leave" className="h-8">特休</SelectItem>
-                              <SelectItem value="compensatory-leave" className="h-8">振休</SelectItem>
-                              <SelectItem value="compensatory-leave-planned" className="h-8">振予</SelectItem>
-                              <SelectItem value="absence" className="h-8">欠勤</SelectItem>
-                              <SelectItem value="late" className="h-8">遅刻</SelectItem>
-                              <SelectItem value="early-leave" className="h-8">早退</SelectItem>
-                              <SelectItem value="delay" className="h-8">遅延</SelectItem>
-                              <SelectItem value="shift" className="h-8">シフト</SelectItem>
-                              <SelectItem value="business-holiday" className="h-8">休業</SelectItem>
+                              <SelectItem value="none" className="h-7"></SelectItem>
+                              <SelectItem value="holiday-work" className="h-7">休出</SelectItem>
+                              <SelectItem value="paid-leave" className="h-7">有休</SelectItem>
+                              <SelectItem value="am-leave" className="h-7">前休</SelectItem>
+                              <SelectItem value="pm-leave" className="h-7">後休</SelectItem>
+                              <SelectItem value="special-leave" className="h-7">特休</SelectItem>
+                              <SelectItem value="compensatory-leave" className="h-7">振休</SelectItem>
+                              <SelectItem value="compensatory-leave-planned" className="h-7">振予</SelectItem>
+                              <SelectItem value="absence" className="h-7">欠勤</SelectItem>
+                              <SelectItem value="late" className="h-7">遅刻</SelectItem>
+                              <SelectItem value="early-leave" className="h-7">早退</SelectItem>
+                              <SelectItem value="delay" className="h-7">遅延</SelectItem>
+                              <SelectItem value="shift" className="h-7">シフト</SelectItem>
+                              <SelectItem value="business-holiday" className="h-7">休業</SelectItem>
                             </SelectContent>
                           </Select>
                           ) : (
-                            <div className="h-8 flex items-center px-3 font-medium">
+                            <div className="h-7 flex items-center px-3 font-medium text-sm">
                               {(() => {
                                 switch (attendanceData[dateKey]?.type) {
                                   case 'holiday-work': return '休出';
@@ -1337,7 +1380,7 @@ export default function AttendancePage() {
                             </div>
                           )}
                         </div>
-                        <div className="col-span-4">
+                        <div className="col-span-4 px-2">
                           {isEditable() ? (
                           <Input
                             type="text"
@@ -1347,12 +1390,12 @@ export default function AttendancePage() {
                             placeholder={t("remarks-placeholder")}
                           />
                           ) : (
-                            <div className="h-8 flex items-center px-3 font-medium">
+                            <div className="h-7 flex items-center px-3 font-medium text-sm">
                               {attendanceData[dateKey]?.remarks || ""}
                             </div>
                           )}
                         </div>
-                        <div className="col-span-1">
+                        <div className="col-span-1 px-2">
                           {isEditable() ? (
                           <Input
                             type="text"
@@ -1363,7 +1406,7 @@ export default function AttendancePage() {
                               className="h-8 text-center placeholder:text-gray-300 border-[#d1d5db] border-opacity-85"
                           />
                           ) : (
-                            <div className="h-8 flex items-center justify-center font-medium">
+                            <div className="h-7 flex items-center justify-center font-medium text-sm">
                               {attendanceData[dateKey]?.lateEarlyHours || ""}
                             </div>
                           )}

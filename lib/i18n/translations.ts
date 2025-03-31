@@ -44,7 +44,7 @@ export const translations = {
     "holiday-work-days": "休日出勤日数",
     "absence-days": "欠勤日数",
     "total-work-time": "総勤務時間",
-    "late-early-hours": "遅刻・早退時間",
+    "late-early-hours": "遅刻早退時間",
     "paid-leave-days": "有給休暇取得日数",
     "days-suffix": "日",
     "hours-suffix": "時間",
