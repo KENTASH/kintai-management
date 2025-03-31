@@ -24,6 +24,7 @@ export interface BusinessExpense {
   roundTripType: string;
   amount: number;
   remarks?: string;
+  category?: 'business';
 }
 
 export interface ReceiptRecord {
@@ -99,7 +100,7 @@ export async function fetchExpenseData(
       .from('expense_details')
       .select('*')
       .eq('header_id', headerId)
-      .eq('category', 'expense');
+      .eq('category', 'business');
 
     if (expenseError) {
       console.error('業務経費データ取得エラー:', expenseError);
@@ -348,7 +349,7 @@ export async function saveExpenseData(
       if (data.businessExpenses.length > 0) {
         const businessDetails = data.businessExpenses.map(expense => ({
           header_id: headerId,
-          category: 'expense',
+          category: 'business',
           date: expense.date,
           transportation: expense.transportation,
           from_location: expense.from,

@@ -138,7 +138,7 @@ interface Message {
 
 // 経費の型定義を追加
 interface ExpenseRecord {
-  id?: string;
+  id: string;
   date: string;
   transportation: string;
   from: string;
@@ -146,8 +146,8 @@ interface ExpenseRecord {
   type: string;
   roundTrip: string;
   amount: number;
-  remarks?: string;
-  category: 'commute' | 'expense';
+  remarks: string; // 備考は必須フィールドとして定義
+  category: 'commute' | 'business';
 }
 
 const commuteTypes = [
@@ -280,7 +280,7 @@ export default function AttendancePage() {
       .reduce((sum, expense) => sum + expense.amount, 0)
 
     const businessTotal = expenses
-      .filter(expense => expense.category === 'expense')
+      .filter(expense => expense.category === 'business')
       .reduce((sum, expense) => sum + expense.amount, 0)
 
     return {
@@ -587,7 +587,7 @@ export default function AttendancePage() {
           roundTrip: expense.roundTripType,
           amount: expense.amount,
           remarks: expense.remarks || '',
-          category: 'expense' as const
+          category: 'business' as const
         }));
         
         // 領収書データをそのまま設定
@@ -1220,7 +1220,7 @@ export default function AttendancePage() {
     }
 
     // 金額のバリデーション
-    if (isNaN(newExpense.amount) || newExpense.amount <= 0) {
+    if (isNaN(Number(newExpense.amount)) || Number(newExpense.amount) <= 0) {
       setExpenseValidationError('金額には正の数字を入力してください。')
       return
     }
@@ -1230,15 +1230,15 @@ export default function AttendancePage() {
 
     const expense: ExpenseRecord = {
       id: newExpense.id || uuidv4(),
-      date: newExpense.date,
-      transportation: newExpense.transportation,
-      from: newExpense.from,
-      to: newExpense.to,
-      type: newExpense.type,
-      roundTrip: newExpense.roundTrip,
-      amount: newExpense.amount,
-      remarks: newExpense.remarks,
-      category: currentCategory // 現在のカテゴリを正しく使用
+      date: newExpense.date || '',
+      transportation: newExpense.transportation || '',
+      from: newExpense.from || '',
+      to: newExpense.to || '',
+      type: newExpense.type || '',
+      roundTrip: newExpense.roundTrip || '',
+      amount: Number(newExpense.amount) || 0,
+      remarks: newExpense.remarks || '',
+      category: currentCategory as 'commute' | 'business'
     }
 
     if (newExpense.id) {
@@ -1259,7 +1259,7 @@ export default function AttendancePage() {
       roundTrip: '',
       amount: 0,
       remarks: '',
-      category: currentCategory // 現在のカテゴリを維持
+      category: currentCategory
     })
     
     setExpenseValidationError(null)
@@ -1315,7 +1315,7 @@ export default function AttendancePage() {
         }));
       
       const businessExpenses = expenses
-        .filter(expense => expense.category === 'expense')
+        .filter(expense => expense.category === 'business')
         .map(expense => ({
           id: expense.id,
           date: expense.date,
@@ -1938,7 +1938,7 @@ export default function AttendancePage() {
                     className="bg-white hover:bg-gray-100 text-gray-900 border border-gray-200"
                   >
                     <Plus className="h-4 w-4 mr-2" />
-                    新規追加
+                    通勤費追加
                   </Button>
                 </div>
 
@@ -2011,7 +2011,7 @@ export default function AttendancePage() {
                     className="bg-white hover:bg-gray-100 text-gray-900 border border-gray-200"
                   >
                     <Plus className="h-4 w-4 mr-2" />
-                    新規追加
+                    業務経費追加
                   </Button>
                 </div>
 
@@ -2105,7 +2105,19 @@ export default function AttendancePage() {
                           size="icon"
                           onClick={() => {
                             setIsAddingExpense(false)
-                            setNewExpense({ category: 'commute' })
+                            // カテゴリを維持したまま初期化する
+                            const currentCategory = newExpense.category || 'commute';
+                            setNewExpense({
+                              date: format(new Date(), 'yyyy/MM/dd'),
+                              transportation: '',
+                              from: '',
+                              to: '',
+                              type: '',
+                              roundTrip: '',
+                              amount: 0,
+                              remarks: '',
+                              category: currentCategory as 'commute' | 'business'
+                            })
                             setExpenseValidationError(null)
                           }}
                         >
@@ -2235,7 +2247,7 @@ export default function AttendancePage() {
                               roundTrip: '',
                               amount: 0,
                               remarks: '',
-                              category: currentCategory
+                              category: currentCategory as 'commute' | 'business'
                             })
                           }}
                         >
@@ -2269,7 +2281,7 @@ export default function AttendancePage() {
                     className="bg-white hover:bg-gray-100 text-gray-900 border border-gray-200"
                   >
                     <Plus className="h-4 w-4 mr-2" />
-                    新規追加
+                    ファイル追加
                   </Button>
                 </div>
 

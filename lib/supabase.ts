@@ -209,4 +209,23 @@ export const deleteFile = async (filePath: string) => {
     console.error('ファイル削除エラー:', error);
     throw error;
   }
-}; 
+};
+
+// 経費の型定義
+export interface ExpenseDetails {
+  id?: string;
+  header_id: string;
+  category: 'commute' | 'business'; // 'expense'から'business'に変更
+  date: string;
+  transportation: string;
+  from_location: string;
+  to_location: string;
+  expense_type: string;
+  round_trip_type: string;
+  amount: number;
+  remarks?: string;
+  created_at?: string;
+  updated_at?: string;
+  created_by?: string;
+  updated_by?: string;
+} 
