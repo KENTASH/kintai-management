@@ -939,7 +939,7 @@ export default function AttendancePage() {
 
     // 中央配置のモーダルメッセージ（検索中表示用）
     if (message.position === 'center') {
-  return (
+      return (
         <div className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-50">
           <div className={`
             rounded-lg border p-6 
@@ -963,52 +963,19 @@ export default function AttendancePage() {
       )
     }
 
-    // エラーとワーニングは上部に表示
-    if (message.type === 'error')
-      return (
-        <div className="relative mb-4 pointer-events-auto w-1/2">
-          <AnimatePresence>
-            {message && (
-              <motion.div
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.2 }}
-                className={`
-                  flex items-center justify-between
-                  rounded-lg border p-4 
-                  shadow-lg
-                  ${styles[message.type]}
-                `}
-              >
-                <div className="flex items-start gap-2">
-                  <div className="mt-1">
-                    {icons[message.type]}
-                  </div>
-                  <span className="text-sm font-medium whitespace-pre-line">{formattedMessage}</span>
-                </div>
-                <button
-                  onClick={handleCloseMessage}
-                  className="p-1 hover:bg-gray-100 rounded-full"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      )
-
-    // 正常メッセージは下部に表示
+    // すべてのメッセージを画面上部に表示
     return (
-      <div className="fixed bottom-8 left-0 right-0 z-[100] flex justify-center pointer-events-none">
-        <AnimatePresence>
+      <div className="fixed top-16 left-0 right-0 z-[100] flex justify-center pointer-events-none">
+        <AnimatePresence mode="wait">
           {message && (
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 20 }}
-              transition={{ duration: 0.2 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ 
+                duration: 0.3,
+                ease: "easeInOut"
+              }}
               className={`
                 pointer-events-auto
                 flex items-center gap-2 
