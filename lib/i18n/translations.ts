@@ -63,7 +63,7 @@ export const translations = {
     "total-holiday-work": "総休日出勤",
     "total-paid-leave": "有給休暇取得",
     "date": "日付",
-    "remarks-placeholder": "備考を入力",
+    "remarks-placeholder": "作業内容を入力",
     "date-format": "yyyy年MM月dd日",
     "date-format-short": "M/d",
     "weekday-format": "E",

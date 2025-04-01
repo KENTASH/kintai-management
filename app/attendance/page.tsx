@@ -679,13 +679,13 @@ export default function AttendancePage() {
       setIsLoading(false);
     }
   };
-  
+
   // 初期表示時のデータ取得
   useEffect(() => {
     if (userInfo?.id) {
-      const year = currentDate.getFullYear()
-      const month = currentDate.getMonth() + 1
-      fetchAttendanceData(year, month)
+    const year = currentDate.getFullYear()
+    const month = currentDate.getMonth() + 1
+    fetchAttendanceData(year, month)
       fetchExpenseDataForDisplay(userInfo.id, year, month)
     }
   }, [userInfo, currentDate])
@@ -1676,11 +1676,11 @@ export default function AttendancePage() {
                           </span>
                         ) : (
                           <>
-                            <Save className="h-4 w-4 mr-2" />
-                            {t("save")}
+                  <Save className="h-4 w-4 mr-2" />
+                  {t("save")}
                           </>
                         )}
-                      </Button>
+                </Button>
                     </>
                   ) : null}
                 </div>
