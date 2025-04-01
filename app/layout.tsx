@@ -11,7 +11,7 @@ const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: '勤怠管理システム',
-  description: 'NISZ Attendance Management System',
+  description: '勤怠管理システム',
   icons: {
     icon: '/favicon.ico',
   },

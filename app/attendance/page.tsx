@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useCallback } from "react"
 import React from 'react'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, parse, differenceInMinutes, isWeekend } from "date-fns"
 import { ja } from "date-fns/locale/ja"
@@ -249,6 +249,11 @@ const getHolidayName = (date: Date): string | null => {
   return holiday ? holiday.name : null;
 };
 
+// グローバル変数としてメッセージ表示フラグを追加
+let isSearchingMessageShown = false;
+// 初期ロード完了フラグ（重複実行防止用）
+let initialLoadCompleted = false;
+
 export default function AttendancePage() {
   const { t } = useI18n()
   // 初期日付を設定（現在の日付から1日を引いて、前月の最終日を設定）
@@ -301,6 +306,7 @@ export default function AttendancePage() {
   })
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveSuccess, setSaveSuccess] = useState(false)
+  const [holidayMasterData, setHolidayMasterData] = useState<string[]>([]) // holiday_masterから取得した休日データ
 
   const monthStart = startOfMonth(currentDate)
   const monthEnd = endOfMonth(currentDate)
@@ -444,273 +450,23 @@ export default function AttendancePage() {
     }
   }
 
-  // 勤怠データを取得する関数
-  const fetchAttendanceData = async (year: number, month: number) => {
-    if (!userInfo?.id) return;
-    
-    setIsLoading(true)
-    try {
-      // 1. 勤怠ヘッダーを取得
-      const { data: headerData, error: headerError } = await supabase
-        .from('attendance_headers')
-        .select('*')
-        .eq('user_id', userInfo.id)
-        .eq('year', year)
-        .eq('month', month)
-        .maybeSingle()
-
-      if (headerError) throw headerError
-
-      if (headerData) {
-        // 勤務場所を設定
-        setWorkplace(headerData.workplace || '')
-        // ステータスを設定
-        setStatus(headerData.status || '00')
-
-        // 2. 勤怠詳細を取得
-        const { data: detailsData, error: detailsError } = await supabase
-          .from('attendance_details')
-          .select('*')
-          .eq('header_id', headerData.id)
-          .order('date')
-
-        if (detailsError) throw detailsError
-
-        // 勤怠データを設定
-        const newAttendanceData: typeof attendanceData = {}
-        
-        detailsData?.forEach(detail => {
-          // 勤務形態コードを画面表示用の値に変換
-          let type = 'none'
-          switch (detail.work_type_code) {
-            case '01': type = 'none'; break;
-            case '02': type = 'holiday-work'; break;
-            case '03': type = 'paid-leave'; break;
-            case '04': type = 'am-leave'; break;
-            case '05': type = 'pm-leave'; break;
-            case '06': type = 'special-leave'; break;
-            case '07': type = 'compensatory-leave'; break;
-            case '08': type = 'compensatory-leave-planned'; break;
-            case '09': type = 'absence'; break;
-            case '10': type = 'late'; break;
-            case '11': type = 'early-leave'; break;
-            case '12': type = 'delay'; break;
-            case '13': type = 'shift'; break;
-            case '14': type = 'business-holiday'; break;
-          }
-
-          // 実労働時間を時:分形式に変換
-          const actualHours = Math.floor(detail.actual_working_hours || 0)
-          const actualMinutes = Math.round(((detail.actual_working_hours || 0) % 1) * 60)
-          const actualTime = `${actualHours.toString().padStart(2, '0')}:${actualMinutes.toString().padStart(2, '0')}`
-
-          // 休憩時間を時:分形式に変換
-          const breakHours = Math.floor((detail.break_time || 0) / 60)
-          const breakMinutes = (detail.break_time || 0) % 60
-          const breakTime = `${breakHours.toString().padStart(2, '0')}:${breakMinutes.toString().padStart(2, '0')}`
-
-          // 開始時間と終了時間をHH:MM形式に整形
-          const startTime = detail.start_time ? detail.start_time.substring(0, 5) : '';
-          const endTime = detail.end_time ? detail.end_time.substring(0, 5) : '';
-
-          newAttendanceData[detail.date] = {
-            startTime: startTime,
-            endTime: endTime,
-            breakTime: breakTime,
-            actualTime: actualTime,
-            type: type,
-            remarks: detail.remarks || '',
-            lateEarlyHours: detail.late_early_hours ? detail.late_early_hours.toFixed(1) : ''
-          }
-        })
-
-        setAttendanceData(newAttendanceData)
-      } else {
-        // ヘッダーデータがない場合は空のデータを設定
-        console.log('No header data found, initializing empty data')
-        setAttendanceData({})
-        // セッションストレージの値を使用して勤務場所を初期化
-        const storedWorkplace = sessionStorage.getItem('workplace')
-        setWorkplace(storedWorkplace || '')
-        // ステータスを初期化
-        setStatus('00')
-      }
-      
-      // 検索完了時にメッセージをクリア
-      setMessageWithStability(null)
-    } catch (error) {
-      console.error('Error fetching attendance data:', error)
-      setMessageWithStability({ type: 'error', text: '勤怠データの取得に失敗しました' })
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // ユーザー情報を取得
-  useEffect(() => {
-    const storedUserInfo = sessionStorage.getItem('userProfile')
-    if (storedUserInfo) {
-      const userProfile = JSON.parse(storedUserInfo)
-      console.log('User profile from session storage:', userProfile)
-      setUserInfo(userProfile)
-      setBranchInfo({ name: userProfile.branch_name_jp, code: userProfile.branch_code })
-    } else {
-      console.warn('No user profile found in session storage')
-    }
-  }, [])
-
-  // 月選択時のハンドラー
-  const handleMonthChange = async (month: string) => {
-    const newMonth = parseInt(month);
-    if (!isNaN(newMonth) && newMonth >= 1 && newMonth <= 12) {
-      const newDate = new Date(currentDate);
-      newDate.setMonth(newMonth - 1);
-      setCurrentDate(newDate);
-      
-      setMessageWithStability({ 
-        type: 'info', 
-        text: 'データを検索中です...',
-        position: 'center',
-        alignment: 'center',
-        persistent: true
-      });
-      
-      // 勤怠データ取得
-      fetchAttendanceData(newDate.getFullYear(), newMonth);
-      
-      // 経費データ取得
-      const userInfoStr = sessionStorage.getItem('userProfile');
-      if (userInfoStr) {
-        const userProfile = JSON.parse(userInfoStr);
-        const userId = userProfile.id;
-        await fetchExpenseDataForDisplay(userId, newDate.getFullYear(), newMonth);
-      }
-    }
-  };
-
-  // 年選択時のハンドラー
-  const handleYearChange = async (year: string) => {
-    const newYear = parseInt(year);
-    if (!isNaN(newYear)) {
-      const newDate = new Date(currentDate);
-      newDate.setFullYear(newYear);
-      setCurrentDate(newDate);
-      
-      setMessageWithStability({ 
-        type: 'info', 
-        text: 'データを検索中です...',
-        position: 'center',
-        alignment: 'center',
-        persistent: true
-      });
-      
-      // 勤怠データ取得
-      fetchAttendanceData(newYear, newDate.getMonth() + 1);
-      
-      // 経費データ取得
-      const userInfoStr = sessionStorage.getItem('userProfile');
-      if (userInfoStr) {
-        const userProfile = JSON.parse(userInfoStr);
-        const userId = userProfile.id;
-        await fetchExpenseDataForDisplay(userId, newYear, newDate.getMonth() + 1);
-      }
-    }
-  };
-  
-  // 経費データ取得機能
-  const fetchExpenseDataForDisplay = async (userId: string, year: number, month: number) => {
-    try {
-      setIsLoading(true);
-      
-      const result = await fetchExpenseData(userId, year, month);
-      
-      if (result.success && result.data) {
-        console.log('取得した経費データ:', result.data);
-        
-        // 通勤費データを画面表示用に変換
-        const commuteExpenses = result.data.commuteExpenses.map(expense => ({
-          id: expense.id || uuidv4(),
-          date: expense.date,
-          transportation: expense.transportation,
-          from: expense.from,
-          to: expense.to,
-          type: expense.expenseType,
-          roundTrip: expense.roundTripType,
-          amount: expense.amount,
-          remarks: expense.remarks || '',
-          category: 'commute' as const
-        }));
-        
-        // 業務経費データを画面表示用に変換
-        const businessExpenses = result.data.businessExpenses.map(expense => ({
-          id: expense.id || uuidv4(),
-          date: expense.date,
-          transportation: expense.transportation,
-          from: expense.from,
-          to: expense.to,
-          type: expense.expenseType,
-          roundTrip: expense.roundTripType,
-          amount: expense.amount,
-          remarks: expense.remarks || '',
-          category: 'business' as const
-        }));
-        
-        // 領収書データをそのまま設定
-        setReceipts(result.data.receipts);
-        
-        // 通勤費と業務経費を統合して画面に表示
-        setExpenses([...commuteExpenses, ...businessExpenses]);
-      } else {
-        console.error('経費データの取得に失敗しました:', result.error);
-        setMessageWithStability({
-          type: 'error',
-          text: `経費データの取得に失敗しました: ${result.error || '不明なエラー'}`,
-          position: 'top'
-        });
-      }
-    } catch (error) {
-      console.error('経費データ取得エラー:', error);
-      setMessageWithStability({
-        type: 'error',
-        text: `経費データの取得中にエラーが発生しました: ${error instanceof Error ? error.message : '不明なエラー'}`,
-        position: 'top'
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // 初期表示時のデータ取得
-  useEffect(() => {
-    if (userInfo?.id) {
-    const year = currentDate.getFullYear()
-    const month = currentDate.getMonth() + 1
-    fetchAttendanceData(year, month)
-      fetchExpenseDataForDisplay(userInfo.id, year, month)
-    }
-  }, [userInfo, currentDate])
-
-  // メッセージの自動消去
-  useEffect(() => {
-    let timer: NodeJS.Timeout | null = null;
-    
-    if (message && (message.type === 'success' || message.type === 'info')) {
-      // 新しいタイマーをセットする前に既存のタイマーをクリア
-      if (timer) clearTimeout(timer);
-      
-      // 表示時間を3秒に設定
-      timer = setTimeout(() => {
-        setMessageWithStability(null)
-      }, 3000)
-    }
-    
-    return () => {
-      if (timer) clearTimeout(timer)
-    }
-  }, [message])
-
-  // メッセージ設定用のラッパー関数を追加
+  // メッセージ設定用のラッパー関数を改良
   const setMessageWithStability = (newMessage: Message | null) => {
+    // 「データを検索中です」メッセージの場合、グローバル変数でフラグ管理
+    if (newMessage && newMessage.text === 'データを検索中です...') {
+      if (isSearchingMessageShown) {
+        // すでに表示中なら何もしない
+        console.log('すでに検索中メッセージが表示されているため、重複を防止します');
+        return;
+      }
+      isSearchingMessageShown = true;
+    }
+    
+    // メッセージをクリアする場合、検索中フラグもリセット
+    if (newMessage === null && isSearchingMessageShown) {
+      isSearchingMessageShown = false;
+    }
+    
     // 現在のメッセージと同じタイプで同じテキストの場合は更新しない
     if (newMessage && message && 
         newMessage.type === message.type && 
@@ -718,13 +474,8 @@ export default function AttendancePage() {
       return;
     }
     
-    // メッセージを更新する前に、既存のメッセージをクリア
-    setMessage(null);
-    
-    // 少し遅延させて新しいメッセージを設定
-    setTimeout(() => {
-      setMessage(newMessage);
-    }, 100);
+    // メッセージを直接設定（遅延なし）
+    setMessage(newMessage);
   }
 
   // メッセージを閉じる処理
@@ -1090,7 +841,7 @@ export default function AttendancePage() {
       // 保存後にデータを再取得
       const year = currentDate.getFullYear();
       const month = currentDate.getMonth() + 1;
-      await fetchAttendanceData(year, month);
+      await fetchAllData(year, month);
       
       // データ取得後に成功メッセージを表示
       setMessageWithStability({ 
@@ -1530,6 +1281,252 @@ export default function AttendancePage() {
     }
   }
 
+  // 休日判定関数を拡張（holiday_masterのデータも含める）
+  const isHoliday = (day: Date): boolean => {
+    const dateString = format(day, 'yyyy-MM-dd')
+    return isJapaneseHoliday(day) || holidayMasterData.includes(dateString)
+  }
+
+  // 勤怠データと経費データを一括して取得する統合関数
+  const fetchAllData = useCallback(async (year: number, month: number) => {
+    if (!userInfo?.id) return;
+    
+    // すでにデータをロード中の場合は再度実行しない
+    if (isLoading) {
+      console.log('すでにデータ取得中のため、重複呼び出しをスキップします');
+      return;
+    }
+    
+    // 一度だけメッセージを表示
+    setMessageWithStability({ 
+      type: 'info', 
+      text: 'データを検索中です...',
+      position: 'center',
+      alignment: 'center',
+      persistent: true
+    });
+    
+    setIsLoading(true);
+    
+    try {
+      // 1. 休日マスタデータを取得
+      try {
+        const response = await fetch(`/api/holidays?year=${year}`)
+        if (response.ok) {
+          const data = await response.json()
+          const holidayDates = data.map((holiday: any) => holiday.date)
+          setHolidayMasterData(holidayDates)
+        }
+      } catch (error) {
+        console.error('休日マスタデータの取得エラー:', error)
+      }
+      
+      // 2. 勤怠データを取得
+      const { data: headerData, error: headerError } = await supabase
+        .from('attendance_headers')
+        .select('*')
+        .eq('user_id', userInfo.id)
+        .eq('year', year)
+        .eq('month', month)
+        .maybeSingle()
+
+      if (headerError) throw headerError
+
+      if (headerData) {
+        // 勤務場所とステータスを設定
+        setWorkplace(headerData.workplace || '')
+        setStatus(headerData.status || '00')
+
+        // 勤怠詳細を取得
+        const { data: detailsData, error: detailsError } = await supabase
+          .from('attendance_details')
+          .select('*')
+          .eq('header_id', headerData.id)
+          .order('date')
+
+        if (detailsError) throw detailsError
+
+        // 勤怠データを設定
+        const newAttendanceData: typeof attendanceData = {}
+        
+        detailsData?.forEach(detail => {
+          // 勤務形態コードを画面表示用の値に変換
+          let type = 'none'
+          switch (detail.work_type_code) {
+            case '01': type = 'none'; break;
+            case '02': type = 'holiday-work'; break;
+            case '03': type = 'paid-leave'; break;
+            case '04': type = 'am-leave'; break;
+            case '05': type = 'pm-leave'; break;
+            case '06': type = 'special-leave'; break;
+            case '07': type = 'compensatory-leave'; break;
+            case '08': type = 'compensatory-leave-planned'; break;
+            case '09': type = 'absence'; break;
+            case '10': type = 'late'; break;
+            case '11': type = 'early-leave'; break;
+            case '12': type = 'delay'; break;
+            case '13': type = 'shift'; break;
+            case '14': type = 'business-holiday'; break;
+          }
+
+          // 実労働時間を時:分形式に変換
+          const actualHours = Math.floor(detail.actual_working_hours || 0)
+          const actualMinutes = Math.round(((detail.actual_working_hours || 0) % 1) * 60)
+          const actualTime = `${actualHours.toString().padStart(2, '0')}:${actualMinutes.toString().padStart(2, '0')}`
+
+          // 休憩時間を時:分形式に変換
+          const breakHours = Math.floor((detail.break_time || 0) / 60)
+          const breakMinutes = (detail.break_time || 0) % 60
+          const breakTime = `${breakHours.toString().padStart(2, '0')}:${breakMinutes.toString().padStart(2, '0')}`
+
+          // 開始時間と終了時間をHH:MM形式に整形
+          const startTime = detail.start_time ? detail.start_time.substring(0, 5) : '';
+          const endTime = detail.end_time ? detail.end_time.substring(0, 5) : '';
+
+          newAttendanceData[detail.date] = {
+            startTime: startTime,
+            endTime: endTime,
+            breakTime: breakTime,
+            actualTime: actualTime,
+            type: type,
+            remarks: detail.remarks || '',
+            lateEarlyHours: detail.late_early_hours ? detail.late_early_hours.toFixed(1) : ''
+          }
+        })
+
+        setAttendanceData(newAttendanceData)
+      } else {
+        // ヘッダーデータがない場合は空のデータを設定
+        setAttendanceData({})
+        const storedWorkplace = sessionStorage.getItem('workplace')
+        setWorkplace(storedWorkplace || '')
+        setStatus('00')
+      }
+      
+      // 3. 経費データを取得
+      if (userInfo.id) {
+        const result = await fetchExpenseData(userInfo.id, year, month);
+        
+        if (result.success && result.data) {
+          // 通勤費データを画面表示用に変換
+          const commuteExpenses = result.data.commuteExpenses.map(expense => ({
+            id: expense.id || uuidv4(),
+            date: expense.date,
+            transportation: expense.transportation,
+            from: expense.from,
+            to: expense.to,
+            type: expense.expenseType,
+            roundTrip: expense.roundTripType,
+            amount: expense.amount,
+            remarks: expense.remarks || '',
+            category: 'commute' as const
+          }));
+          
+          // 業務経費データを画面表示用に変換
+          const businessExpenses = result.data.businessExpenses.map(expense => ({
+            id: expense.id || uuidv4(),
+            date: expense.date,
+            transportation: expense.transportation,
+            from: expense.from,
+            to: expense.to,
+            type: expense.expenseType,
+            roundTrip: expense.roundTripType,
+            amount: expense.amount,
+            remarks: expense.remarks || '',
+            category: 'business' as const
+          }));
+          
+          // 領収書データをそのまま設定
+          setReceipts(result.data.receipts);
+          
+          // 通勤費と業務経費を統合して画面に表示
+          setExpenses([...commuteExpenses, ...businessExpenses]);
+        }
+      }
+      
+      // 検索完了時にメッセージをクリア
+      setMessageWithStability(null)
+    } catch (error) {
+      console.error('Error fetching data:', error)
+      setMessageWithStability({ 
+        type: 'error', 
+        text: 'データの取得に失敗しました', 
+        persistent: true
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }, [userInfo?.id]); // userInfoだと再レンダリングの原因になるため、idだけに依存
+
+  // 月選択時のハンドラー
+  const handleMonthChange = useCallback((month: string) => {
+    const newMonth = parseInt(month);
+    if (!isNaN(newMonth) && newMonth >= 1 && newMonth <= 12) {
+      const newDate = new Date(currentDate);
+      newDate.setMonth(newMonth - 1);
+      setCurrentDate(newDate);
+      
+      // 統合関数を呼び出し
+      fetchAllData(newDate.getFullYear(), newMonth);
+    }
+  }, [currentDate, fetchAllData]);
+
+  // 年選択時のハンドラー
+  const handleYearChange = useCallback((year: string) => {
+    const newYear = parseInt(year);
+    if (!isNaN(newYear)) {
+      const newDate = new Date(currentDate);
+      newDate.setFullYear(newYear);
+      setCurrentDate(newDate);
+      
+      // 統合関数を呼び出し
+      fetchAllData(newYear, newDate.getMonth() + 1);
+    }
+  }, [currentDate, fetchAllData]);
+  
+  // 初期表示時のデータ取得（最初の1回だけ）
+  useEffect(() => {
+    if (userInfo?.id && !initialLoadCompleted) {
+      const year = currentDate.getFullYear()
+      const month = currentDate.getMonth() + 1
+      console.log('初期データロード:', year, month, userInfo.id);
+      fetchAllData(year, month)
+      initialLoadCompleted = true;
+    }
+  }, [userInfo, fetchAllData]);
+
+  // ユーザー情報を取得
+  useEffect(() => {
+    const storedUserInfo = sessionStorage.getItem('userProfile')
+    if (storedUserInfo) {
+      const userProfile = JSON.parse(storedUserInfo)
+      console.log('User profile from session storage:', userProfile)
+      setUserInfo(userProfile)
+      setBranchInfo({ name: userProfile.branch_name_jp, code: userProfile.branch_code })
+    } else {
+      console.warn('No user profile found in session storage')
+    }
+  }, [])
+
+  // メッセージの自動消去
+  useEffect(() => {
+    let timer: NodeJS.Timeout | null = null;
+    
+    if (message && (message.type === 'success' || message.type === 'info')) {
+      // 新しいタイマーをセットする前に既存のタイマーをクリア
+      if (timer) clearTimeout(timer);
+      
+      // 表示時間を3秒に設定
+      timer = setTimeout(() => {
+        setMessageWithStability(null)
+      }, 3000)
+    }
+    
+    return () => {
+      if (timer) clearTimeout(timer)
+    }
+  }, [message])
+
   return (
     <div className="space-y-6 relative z-[1]">
       <div>
@@ -1787,12 +1784,12 @@ export default function AttendancePage() {
                         className={`grid grid-cols-12 gap-0 items-center px-4 py-1.5 ${
                           hasError 
                             ? 'bg-yellow-50 dark:bg-yellow-900/20' 
-                            : isWeekend || isJapaneseHoliday(day)
+                            : isWeekend || isHoliday(day)
                               ? 'bg-gray-50 dark:bg-gray-800/50' 
                               : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
                         }`}
                       >
-                        <div className={`col-span-1 text-sm font-medium px-6 ${isEditable() ? 'py-1.5' : 'py-1'} ${isWeekend || isJapaneseHoliday(day) ? 'text-red-600' : ''}`}>
+                        <div className={`col-span-1 text-sm font-medium px-6 ${isEditable() ? 'py-1.5' : 'py-1'} ${isWeekend || isHoliday(day) ? 'text-red-600' : ''}`}>
                           {format(day, 'M/d')}({dayOfWeek})
                         </div>
                         <div className="col-span-1 px-2">
