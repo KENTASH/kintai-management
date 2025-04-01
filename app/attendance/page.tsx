@@ -184,6 +184,71 @@ type ExpenseItem = {
   remarks: string;
 };
 
+// 祝日データの型定義
+interface Holiday {
+  date: string;  // YYYY-MM-DD形式
+  name: string;
+}
+
+// 祝日データ（2024年-2025年）
+const HOLIDAYS: Holiday[] = [
+  // 2024年
+  { date: '2024-01-01', name: '元日' },
+  { date: '2024-01-08', name: '成人の日' },
+  { date: '2024-02-11', name: '建国記念の日' },
+  { date: '2024-02-12', name: '建国記念の日 振替休日' },
+  { date: '2024-03-20', name: '春分の日' },
+  { date: '2024-04-29', name: '昭和の日' },
+  { date: '2024-05-03', name: '憲法記念日' },
+  { date: '2024-05-04', name: 'みどりの日' },
+  { date: '2024-05-05', name: 'こどもの日' },
+  { date: '2024-05-06', name: 'こどもの日 振替休日' },
+  { date: '2024-07-15', name: '海の日' },
+  { date: '2024-08-11', name: '山の日' },
+  { date: '2024-08-12', name: '山の日 振替休日' },
+  { date: '2024-09-16', name: '敬老の日' },
+  { date: '2024-09-22', name: '秋分の日' },
+  { date: '2024-09-23', name: '秋分の日 振替休日' },
+  { date: '2024-10-14', name: 'スポーツの日' },
+  { date: '2024-11-03', name: '文化の日' },
+  { date: '2024-11-04', name: '文化の日 振替休日' },
+  { date: '2024-12-23', name: '天皇誕生日' },
+  { date: '2024-12-30', name: '年末年始休暇' },
+  { date: '2024-12-31', name: '年末年始休暇' },
+  // 2025年
+  { date: '2025-01-01', name: '元日' },
+  { date: '2025-01-13', name: '成人の日' },
+  { date: '2025-02-11', name: '建国記念の日' },
+  { date: '2025-03-20', name: '春分の日' },
+  { date: '2025-04-29', name: '昭和の日' },
+  { date: '2025-05-03', name: '憲法記念日' },
+  { date: '2025-05-04', name: 'みどりの日' },
+  { date: '2025-05-05', name: 'こどもの日' },
+  { date: '2025-05-06', name: 'こどもの日 振替休日' },
+  { date: '2025-07-21', name: '海の日' },
+  { date: '2025-08-11', name: '山の日' },
+  { date: '2025-09-15', name: '敬老の日' },
+  { date: '2025-09-23', name: '秋分の日' },
+  { date: '2025-10-13', name: 'スポーツの日' },
+  { date: '2025-11-03', name: '文化の日' },
+  { date: '2025-11-24', name: '勤労感謝の日' },
+  { date: '2025-12-23', name: '天皇誕生日' },
+  { date: '2025-12-31', name: '年末年始休暇' },
+];
+
+// 祝日判定関数
+const isJapaneseHoliday = (date: Date): boolean => {
+  const dateString = format(date, 'yyyy-MM-dd');
+  return HOLIDAYS.some(holiday => holiday.date === dateString);
+};
+
+// 祝日名取得関数
+const getHolidayName = (date: Date): string | null => {
+  const dateString = format(date, 'yyyy-MM-dd');
+  const holiday = HOLIDAYS.find(h => h.date === dateString);
+  return holiday ? holiday.name : null;
+};
+
 export default function AttendancePage() {
   const { t } = useI18n()
   // 初期日付を設定（現在の日付から1日を引いて、前月の最終日を設定）
@@ -1540,6 +1605,16 @@ export default function AttendancePage() {
                   {getStatusName(status)}
                 </div>
               </div>
+              {!isEditable() && (
+                <Button 
+                  onClick={moveToEditStatus} 
+                  className="bg-amber-600 hover:bg-amber-700 ml-4"
+                  disabled={isLoading || isSaving}
+                >
+                  <Edit className="h-4 w-4 mr-2" />
+                  再編集
+                </Button>
+              )}
             </div>
           </div>
 
@@ -1601,96 +1676,87 @@ export default function AttendancePage() {
                           </span>
                         ) : (
                           <>
-                  <Save className="h-4 w-4 mr-2" />
-                  {t("save")}
+                            <Save className="h-4 w-4 mr-2" />
+                            {t("save")}
                           </>
                         )}
-                </Button>
+                      </Button>
                     </>
-                  ) : (
-                    <Button 
-                      onClick={moveToEditStatus} 
-                      className="bg-amber-600 hover:bg-amber-700"
-                      disabled={isLoading || isSaving}
-                    >
-                      <Edit className="h-4 w-4 mr-2" />
-                      再編集
-                    </Button>
-                  )}
+                  ) : null}
                 </div>
               </div>
 
               <div className="grid grid-cols-7 gap-x-4 mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <div className="flex justify-between items-center gap-2">
-                  <span className="text-muted-foreground flex items-center gap-1">
-                    <CalendarDays className="h-4 w-4" />
-                    {t("total-work-days")}:
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <CalendarDays className="h-3.5 w-3.5" />
+                    {t("total-work-days")}
                   </span>
-                  <span className="font-medium">{summary.totalWorkDays}{t("days-suffix")}</span>
+                  <span className="text-base font-medium">{summary.totalWorkDays}{t("days-suffix")}</span>
                 </div>
-                <div className="flex justify-between items-center gap-2">
-                  <span className="text-muted-foreground flex items-center gap-1">
-                    <Briefcase className="h-4 w-4" />
-                    {t("regular-work-days")}:
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Briefcase className="h-3.5 w-3.5" />
+                    {t("regular-work-days")}
                   </span>
-                  <span className="font-medium">{summary.regularWorkDays}{t("days-suffix")}</span>
+                  <span className="text-base font-medium">{summary.regularWorkDays}{t("days-suffix")}</span>
                 </div>
-                <div className="flex justify-between items-center gap-2">
-                  <span className="text-muted-foreground flex items-center gap-1">
-                    <CalendarPlus className="h-4 w-4" />
-                    {t("holiday-work-days")}:
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <CalendarPlus className="h-3.5 w-3.5" />
+                    {t("holiday-work-days")}
                   </span>
-                  <span className="font-medium">{summary.holidayWorkDays}{t("days-suffix")}</span>
+                  <span className="text-base font-medium">{summary.holidayWorkDays}{t("days-suffix")}</span>
                 </div>
-                <div className="flex justify-between items-center gap-2">
-                  <span className="text-muted-foreground flex items-center gap-1">
-                    <CalendarX className="h-4 w-4" />
-                    {t("absence-days")}:
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <CalendarX className="h-3.5 w-3.5" />
+                    {t("absence-days")}
                   </span>
-                  <span className="font-medium">{summary.absenceDays}{t("days-suffix")}</span>
+                  <span className="text-base font-medium">{summary.absenceDays}{t("days-suffix")}</span>
                 </div>
-                <div className="flex justify-between items-center gap-2">
-                  <span className="text-muted-foreground flex items-center gap-1">
-                    <Clock4 className="h-4 w-4" />
-                    {t("total-work-time")}:
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Clock4 className="h-3.5 w-3.5" />
+                    {t("total-work-time")}
                   </span>
-                  <span className="font-medium">{summary.totalWorkTime}{t("hours")}</span>
+                  <span className="text-base font-medium">{summary.totalWorkTime}{t("hours")}</span>
                 </div>
-                <div className="flex justify-between items-center gap-2">
-                  <span className="text-muted-foreground flex items-center gap-1">
-                    <ArrowLeftRight className="h-4 w-4" />
-                    {t("late-early-hours")}:
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <ArrowLeftRight className="h-3.5 w-3.5" />
+                    {t("late-early-hours")}
                   </span>
-                  <span className="font-medium">{summary.lateEarlyHours}{t("hours")}</span>
+                  <span className="text-base font-medium">{summary.lateEarlyHours}{t("hours")}</span>
                 </div>
-                <div className="flex justify-between items-center gap-2">
-                  <span className="text-muted-foreground flex items-center gap-1">
-                    <CalendarCheck className="h-4 w-4" />
-                    {t("paid-leave-days")}:
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <CalendarCheck className="h-3.5 w-3.5" />
+                    {t("paid-leave-days")}
                   </span>
-                  <span className="font-medium">{summary.paidLeaveDays}{t("days-suffix")}</span>
+                  <span className="text-base font-medium">{summary.paidLeaveDays}{t("days-suffix")}</span>
                 </div>
               </div>
 
               <div className="border rounded-lg border-gray-300 shadow-sm">
                 <div className="grid grid-cols-12 gap-0 p-2 bg-blue-50 dark:bg-gray-800 rounded-t-lg text-sm border-b border-gray-300">
-                  <div className="col-span-1 text-gray-500 font-medium flex items-center gap-1 px-6">
+                  <div className="col-span-1 text-gray-500 font-medium flex items-center justify-center gap-1 px-6">
                     <Calendar className="h-4 w-4" />
                     {t("date")}
                   </div>
-                  <div className="col-span-1 text-gray-500 font-medium flex items-center gap-1">
+                  <div className="col-span-1 text-gray-500 font-medium flex items-center justify-center gap-1">
                     <Clock className="h-4 w-4" />
                     {t("start-time")}
                   </div>
-                  <div className="col-span-1 text-gray-500 font-medium flex items-center gap-1">
+                  <div className="col-span-1 text-gray-500 font-medium flex items-center justify-center gap-1">
                     <Clock className="h-4 w-4" />
                     {t("end-time")}
                   </div>
-                  <div className="col-span-1 text-gray-500 font-medium flex items-center gap-1">
+                  <div className="col-span-1 text-gray-500 font-medium flex items-center justify-center gap-1">
                     <Timer className="h-4 w-4" />
                     {t("break-time")}
                   </div>
-                  <div className="col-span-1 text-gray-500 font-medium flex items-center gap-1">
+                  <div className="col-span-1 text-gray-500 font-medium flex items-center justify-center gap-1">
                     <CalendarClock className="h-4 w-4" />
                     {t("actual-time")}
                   </div>
@@ -1700,9 +1766,9 @@ export default function AttendancePage() {
                   </div>
                   <div className="col-span-4 text-gray-500 font-medium flex items-center gap-1">
                     <Info className="h-4 w-4" />
-                    {t("remarks")}
+                    作業内容
                   </div>
-                  <div className="col-span-1 text-gray-500 font-medium flex items-center gap-1">
+                  <div className="col-span-1 text-gray-500 font-medium flex items-center justify-center gap-1">
                     <ArrowLeftRight className="h-4 w-4" />
                     {t("late-early-hours")}
                   </div>
@@ -1721,12 +1787,12 @@ export default function AttendancePage() {
                         className={`grid grid-cols-12 gap-0 items-center px-4 py-1.5 ${
                           hasError 
                             ? 'bg-yellow-50 dark:bg-yellow-900/20' 
-                            : isWeekend 
+                            : isWeekend || isJapaneseHoliday(day)
                               ? 'bg-gray-50 dark:bg-gray-800/50' 
                               : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
                         }`}
                       >
-                        <div className={`col-span-1 text-sm font-medium px-6 ${isEditable() ? 'py-1.5' : 'py-1'}`}>
+                        <div className={`col-span-1 text-sm font-medium px-6 ${isEditable() ? 'py-1.5' : 'py-1'} ${isWeekend || isJapaneseHoliday(day) ? 'text-red-600' : ''}`}>
                           {format(day, 'M/d')}({dayOfWeek})
                         </div>
                         <div className="col-span-1 px-2">
@@ -1879,26 +1945,28 @@ export default function AttendancePage() {
             <CardContent className="pt-6">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-semibold">経費請求</h2>
-                <Button
-                  onClick={handleExpenseSave}
-                  className="bg-blue-600 hover:bg-blue-700"
-                  disabled={isSaving}
-                >
-                  {isSaving ? (
-                    <span className="flex items-center">
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      保存中...
-                    </span>
-                  ) : (
-                    <>
-                      <Save className="h-4 w-4 mr-2" />
-                      保存
-                    </>
-                  )}
-                </Button>
+                {(status === '00' || status === '03') && (
+                  <Button
+                    onClick={handleExpenseSave}
+                    className="bg-blue-600 hover:bg-blue-700"
+                    disabled={isSaving}
+                  >
+                    {isSaving ? (
+                      <span className="flex items-center">
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        保存中...
+                      </span>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4 mr-2" />
+                        保存
+                      </>
+                    )}
+                  </Button>
+                )}
               </div>
 
               {/* 経費サマリー */}
@@ -1930,16 +1998,18 @@ export default function AttendancePage() {
                     <Bus className="h-5 w-5 text-blue-600" />
                     <h2 className="text-lg font-semibold text-blue-800">通勤費</h2>
                   </div>
-                  <Button
-                    onClick={() => {
-                      setIsAddingExpense(true)
-                      setNewExpense({ category: 'commute' })
-                    }}
-                    className="bg-white hover:bg-gray-100 text-gray-900 border border-gray-200"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    通勤費追加
-                  </Button>
+                  {(status === '00' || status === '03') && (
+                    <Button
+                      onClick={() => {
+                        setIsAddingExpense(true)
+                        setNewExpense({ category: 'commute' })
+                      }}
+                      className="bg-white hover:bg-gray-100 text-gray-900 border border-gray-200"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      通勤費追加
+                    </Button>
+                  )}
                 </div>
 
                 <div className="border rounded-lg border-gray-200 overflow-hidden">
@@ -1978,17 +2048,19 @@ export default function AttendancePage() {
                           <div className="col-span-1 px-2 text-sm">¥{expense.amount.toLocaleString()}</div>
                           <div className="col-span-1 px-2 text-sm">{expense.remarks}</div>
                           <div className="col-span-1 px-2">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleDeleteExpense(expense.id)
-                              }}
-                              className="h-7 w-7"
-                            >
-                              <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                            </Button>
+                            {(status === '00' || status === '03') && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleDeleteExpense(expense.id)
+                                }}
+                                className="h-7 w-7"
+                              >
+                                <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                              </Button>
+                            )}
                           </div>
                         </div>
                     ))}
@@ -2003,16 +2075,18 @@ export default function AttendancePage() {
                     <Briefcase className="h-5 w-5 text-green-600" />
                     <h2 className="text-lg font-semibold text-green-800">業務経費</h2>
                   </div>
-                  <Button
-                    onClick={() => {
-                      setIsAddingExpense(true)
-                      setNewExpense({ category: 'business' })
-                    }}
-                    className="bg-white hover:bg-gray-100 text-gray-900 border border-gray-200"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    業務経費追加
-                  </Button>
+                  {(status === '00' || status === '03') && (
+                    <Button
+                      onClick={() => {
+                        setIsAddingExpense(true)
+                        setNewExpense({ category: 'business' })
+                      }}
+                      className="bg-white hover:bg-gray-100 text-gray-900 border border-gray-200"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      業務経費追加
+                    </Button>
+                  )}
                 </div>
 
                 <div className="border rounded-lg border-gray-200 overflow-hidden">
@@ -2051,17 +2125,19 @@ export default function AttendancePage() {
                           <div className="col-span-1 px-2 text-sm">¥{expense.amount.toLocaleString()}</div>
                           <div className="col-span-1 px-2 text-sm">{expense.remarks}</div>
                           <div className="col-span-1 px-2">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleDeleteExpense(expense.id)
-                              }}
-                              className="h-7 w-7"
-                            >
-                              <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                            </Button>
+                            {(status === '00' || status === '03') && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleDeleteExpense(expense.id)
+                                }}
+                                className="h-7 w-7"
+                              >
+                                <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                              </Button>
+                            )}
                           </div>
                         </div>
                     ))}
@@ -2139,18 +2215,12 @@ export default function AttendancePage() {
                             type="date"
                             value={newExpense.date ? format(new Date(newExpense.date.replace(/\//g, '-')), 'yyyy-MM-dd') : ''}
                             onChange={(e) => {
-                              // 日付が選択されなかった場合は何もしない
                               if (!e.target.value) return;
-                              // 日付文字列をそのまま使用（ブラウザが返すフォーマットはYYYY-MM-DD）
-                              // 表示用に変換
                               const formattedDate = e.target.value.replace(/-/g, '/');
                               setNewExpense({ ...newExpense, date: formattedDate });
-                              
-                              // デバッグ用
-                              console.log('Selected date:', e.target.value);
-                              console.log('Formatted date:', formattedDate);
                             }}
                             placeholder="YYYY/MM/DD"
+                            disabled={status !== '00' && status !== '03'}
                           />
                         </div>
                         <div>
@@ -2160,6 +2230,7 @@ export default function AttendancePage() {
                           <Input
                             value={newExpense.transportation || ''}
                             onChange={(e) => setNewExpense({ ...newExpense, transportation: e.target.value })}
+                            disabled={status !== '00' && status !== '03'}
                           />
                         </div>
                         <div>
@@ -2167,6 +2238,7 @@ export default function AttendancePage() {
                           <Input
                             value={newExpense.from || ''}
                             onChange={(e) => setNewExpense({ ...newExpense, from: e.target.value })}
+                            disabled={status !== '00' && status !== '03'}
                           />
                         </div>
                         <div>
@@ -2174,6 +2246,7 @@ export default function AttendancePage() {
                           <Input
                             value={newExpense.to || ''}
                             onChange={(e) => setNewExpense({ ...newExpense, to: e.target.value })}
+                            disabled={status !== '00' && status !== '03'}
                           />
                         </div>
                         <div>
@@ -2183,6 +2256,7 @@ export default function AttendancePage() {
                           <Select
                             value={newExpense.type || ''}
                             onValueChange={(value) => setNewExpense({ ...newExpense, type: value })}
+                            disabled={status !== '00' && status !== '03'}
                           >
                             <SelectTrigger>
                               <SelectValue />
@@ -2201,6 +2275,7 @@ export default function AttendancePage() {
                           <Select
                             value={newExpense.roundTrip || ''}
                             onValueChange={(value) => setNewExpense({ ...newExpense, roundTrip: value })}
+                            disabled={status !== '00' && status !== '03'}
                           >
                             <SelectTrigger>
                               <SelectValue />
@@ -2220,6 +2295,7 @@ export default function AttendancePage() {
                             type="number"
                             value={newExpense.amount || ''}
                             onChange={(e) => setNewExpense({ ...newExpense, amount: Number(e.target.value) })}
+                            disabled={status !== '00' && status !== '03'}
                           />
                         </div>
                         <div>
@@ -2227,6 +2303,7 @@ export default function AttendancePage() {
                           <Input
                             value={newExpense.remarks || ''}
                             onChange={(e) => setNewExpense({ ...newExpense, remarks: e.target.value })}
+                            disabled={status !== '00' && status !== '03'}
                           />
                         </div>
                       </div>
@@ -2236,7 +2313,6 @@ export default function AttendancePage() {
                           variant="outline"
                           onClick={() => {
                             setIsAddingExpense(false)
-                            // カテゴリを維持しつつリセット
                             const currentCategory = newExpense.category || 'commute';
                             setNewExpense({
                               date: format(new Date(), 'yyyy/MM/dd'),
@@ -2253,12 +2329,14 @@ export default function AttendancePage() {
                         >
                           キャンセル
                         </Button>
-                        <Button
-                          onClick={handleAddExpense}
-                          className={newExpense.category === 'commute' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-green-600 hover:bg-green-700'}
-                        >
-                          追加
-                        </Button>
+                        {(status === '00' || status === '03') && (
+                          <Button
+                            onClick={handleAddExpense}
+                            className={newExpense.category === 'commute' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-green-600 hover:bg-green-700'}
+                          >
+                            追加
+                          </Button>
+                        )}
                       </div>
                     </motion.div>
                   </motion.div>
@@ -2272,17 +2350,19 @@ export default function AttendancePage() {
                     <FileText className="h-5 w-5 text-purple-600" />
                     <h2 className="text-lg font-semibold text-purple-800">領収書・定期券</h2>
                   </div>
-                  <Button
-                    onClick={() => {
-                      setSelectedReceipt(null)
-                      setShowReceiptViewer(false)
-                      setShowReceiptInput(true)
-                    }}
-                    className="bg-white hover:bg-gray-100 text-gray-900 border border-gray-200"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    ファイル追加
-                  </Button>
+                  {(status === '00' || status === '03') && (
+                    <Button
+                      onClick={() => {
+                        setSelectedReceipt(null)
+                        setShowReceiptViewer(false)
+                        setShowReceiptInput(true)
+                      }}
+                      className="bg-white hover:bg-gray-100 text-gray-900 border border-gray-200"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      ファイル追加
+                    </Button>
+                  )}
                 </div>
 
                 <div className="border rounded-lg border-gray-200 overflow-hidden max-w-2xl">
@@ -2317,14 +2397,16 @@ export default function AttendancePage() {
                           />
                         </div>
                         <div className="col-span-1 px-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDeleteReceipt(receipt.id)}
-                            className="h-7 w-7"
-                          >
-                            <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                          </Button>
+                          {(status === '00' || status === '03') && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteReceipt(receipt.id)}
+                              className="h-7 w-7"
+                            >
+                              <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                            </Button>
+                          )}
                         </div>
                       </div>
                     ))}
