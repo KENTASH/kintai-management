@@ -112,6 +112,10 @@ interface AttendanceDetail {
     remarks?: string
     approverName?: string
   }
+  leader_approved_by_name?: string
+  leader_approved_at?: string
+  admin_approved_by_name?: string
+  admin_approved_at?: string
   records: {
     date: string
     startTime: string
@@ -155,7 +159,7 @@ export default function AttendanceDetailPage() {
   const [rejectionReason, setRejectionReason] = useState('')
   const [showRejectionDialog, setShowRejectionDialog] = useState(false)
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' | 'info'; position?: 'top' | 'center'; dismissible?: boolean } | null>(null)
-  const [holidays, setHolidays] = useState<{ date: string; name: string }[]>([])
+  const [holidays, setHolidays] = useState<{ date: string; remarks: string }[]>([])
 
   // サマリ情報の計算
   const summary = useMemo(() => {
@@ -263,7 +267,7 @@ export default function AttendanceDetailPage() {
     }
 
     return (
-      <div className="fixed top-16 left-0 right-0 z-[100] flex justify-center pointer-events-none">
+      <div className="fixed top-20 left-0 right-0 z-[100] flex justify-center pointer-events-none">
         <AnimatePresence mode="wait">
           {message && (
             <motion.div
