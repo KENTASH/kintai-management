@@ -1487,8 +1487,8 @@ export default function AttendancePage() {
   // 初期表示時のデータ取得（最初の1回だけ）
   useEffect(() => {
     if (userInfo?.id && !initialLoadCompleted) {
-      const year = currentDate.getFullYear()
-      const month = currentDate.getMonth() + 1
+    const year = currentDate.getFullYear()
+    const month = currentDate.getMonth() + 1
       console.log('初期データロード:', year, month, userInfo.id);
       fetchAllData(year, month)
       initialLoadCompleted = true;
