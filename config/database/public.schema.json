@@ -266,7 +266,7 @@
                   "type": "varchar(20)",
                   "not_null": true
               },
-              "branch_id": {
+              "branch": {
                   "type": "varchar(10)",
                   "not_null": true,
                   "foreign_key": "branch_master.code"

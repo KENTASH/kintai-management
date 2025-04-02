@@ -1,13 +1,13 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/components/ui/use-toast"
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { 
   Clock, Search, ChevronRight, CheckCircle, XCircle, ArrowLeft,
   Calendar, IdCard, Building2, User, Activity, ListChecks, SearchX,
@@ -63,6 +63,7 @@ interface AttendanceSummary {
 
 export default function ApproveAttendancePage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { toast } = useToast()
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear())
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1)
@@ -74,6 +75,7 @@ export default function ApproveAttendancePage() {
   const [attendanceSummaries, setAttendanceSummaries] = useState<AttendanceSummary[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [userProfile, setUserProfile] = useState<any>(null)
+  const [isInitialSearch, setIsInitialSearch] = useState(true)
 
   // メッセージの状態管理を追加
   interface Message {
@@ -175,16 +177,8 @@ export default function ApproveAttendancePage() {
     fetchBranches()
   }, [toast])
 
-  // 検索条件のクリア
-  const handleClearSearch = () => {
-    setEmployeeId("")
-    setBranchCode("")
-    setEmployeeName("")
-    setSelectedStatus("")
-  }
-
   // 勤怠データの検索
-  const handleSearch = async () => {
+  const handleSearch = useCallback(async () => {
     setIsLoading(true)
     try {
       console.log('検索開始:', {
@@ -424,6 +418,37 @@ export default function ApproveAttendancePage() {
     } finally {
       setIsLoading(false)
     }
+  }, [selectedYear, selectedMonth, selectedStatus, employeeId, branchCode, employeeName])
+
+  // URLパラメータから検索条件を取得して初期検索を実行
+  useEffect(() => {
+    const year = searchParams.get('year')
+    const month = searchParams.get('month')
+    const empId = searchParams.get('employee_id')
+    const branch = searchParams.get('branch')
+    const name = searchParams.get('name')
+    const status = searchParams.get('status')
+
+    if (year) setSelectedYear(parseInt(year))
+    if (month) setSelectedMonth(parseInt(month))
+    if (empId) setEmployeeId(empId)
+    if (branch) setBranchCode(branch)
+    if (name) setEmployeeName(name)
+    if (status) setSelectedStatus(status)
+
+    // 初期検索時のみ検索を実行
+    if (isInitialSearch && (year || month || empId || branch || name || status)) {
+      handleSearch()
+      setIsInitialSearch(false)  // 初期検索完了後にフラグをオフ
+    }
+  }, [searchParams, isInitialSearch])
+
+  // 検索条件のクリア
+  const handleClearSearch = () => {
+    setEmployeeId("")
+    setBranchCode("")
+    setEmployeeName("")
+    setSelectedStatus("")
   }
 
   // 状態名を取得する関数
@@ -434,7 +459,15 @@ export default function ApproveAttendancePage() {
 
   // 勤怠詳細画面に遷移
   const handleRowClick = (headerId: string, userId: string) => {
-    router.push(`/approve-attendance/detail?id=${headerId}&user_id=${userId}`)
+    const params = new URLSearchParams()
+    if (selectedYear) params.append('year', selectedYear.toString())
+    if (selectedMonth) params.append('month', selectedMonth.toString())
+    if (employeeId) params.append('employee_id', employeeId)
+    if (branchCode) params.append('branch', branchCode)
+    if (employeeName) params.append('name', employeeName)
+    if (selectedStatus) params.append('status', selectedStatus)
+    setIsInitialSearch(true)  // 遷移時にisInitialSearchをtrueにリセット
+    router.push(`/approve-attendance/detail/${headerId}?${params.toString()}`)
   }
 
   // メッセージ表示用のコンポーネント

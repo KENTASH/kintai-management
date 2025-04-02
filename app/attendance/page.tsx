@@ -1683,91 +1683,98 @@ export default function AttendancePage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-7 gap-x-4 mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <div className="flex flex-col gap-1">
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+              {/* サマリ情報 */}
+              <div className="grid grid-cols-7 gap-4 mb-6">
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <div className="text-sm text-blue-600 mb-1 flex items-center gap-1">
                     <CalendarDays className="h-3.5 w-3.5" />
-                    {t("total-work-days")}
-                  </span>
-                  <span className="text-base font-medium">{summary.totalWorkDays}{t("days-suffix")}</span>
+                    総勤務日数
                 </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <div className="text-2xl font-bold text-blue-800">
+                    {summary.totalWorkDays}日
+                </div>
+                </div>
+                <div className="bg-green-50 p-4 rounded-lg">
+                  <div className="text-sm text-green-600 mb-1 flex items-center gap-1">
                     <Briefcase className="h-3.5 w-3.5" />
-                    {t("regular-work-days")}
-                  </span>
-                  <span className="text-base font-medium">{summary.regularWorkDays}{t("days-suffix")}</span>
+                    通常勤務日数
                 </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <div className="text-2xl font-bold text-green-800">
+                    {summary.regularWorkDays}日
+                </div>
+                </div>
+                <div className="bg-amber-50 p-4 rounded-lg">
+                  <div className="text-sm text-amber-600 mb-1 flex items-center gap-1">
                     <CalendarPlus className="h-3.5 w-3.5" />
-                    {t("holiday-work-days")}
-                  </span>
-                  <span className="text-base font-medium">{summary.holidayWorkDays}{t("days-suffix")}</span>
+                    休日出勤日数
+                  </div>
+                  <div className="text-2xl font-bold text-amber-800">
+                    {summary.holidayWorkDays}日
+                  </div>
                 </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                <div className="bg-red-50 p-4 rounded-lg">
+                  <div className="text-sm text-red-600 mb-1 flex items-center gap-1">
                     <CalendarX className="h-3.5 w-3.5" />
-                    {t("absence-days")}
-                  </span>
-                  <span className="text-base font-medium">{summary.absenceDays}{t("days-suffix")}</span>
+                    欠勤日数
+                  </div>
+                  <div className="text-2xl font-bold text-red-800">
+                    {summary.absenceDays}日
+                  </div>
                 </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Clock4 className="h-3.5 w-3.5" />
-                    {t("total-work-time")}
-                  </span>
-                  <span className="text-base font-medium">{summary.totalWorkTime}{t("hours")}</span>
+                <div className="bg-purple-50 p-4 rounded-lg">
+                  <div className="text-sm text-purple-600 mb-1 flex items-center gap-1">
+                    <Timer className="h-3.5 w-3.5" />
+                    総勤務時間
+                  </div>
+                  <div className="text-2xl font-bold text-purple-800">
+                    {summary.totalWorkTime}時間
+                  </div>
                 </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                <div className="bg-orange-50 p-4 rounded-lg">
+                  <div className="text-sm text-orange-600 mb-1 flex items-center gap-1">
                     <ArrowLeftRight className="h-3.5 w-3.5" />
-                    {t("late-early-hours")}
-                  </span>
-                  <span className="text-base font-medium">{summary.lateEarlyHours}{t("hours")}</span>
+                    遅刻早退時間
+                  </div>
+                  <div className="text-2xl font-bold text-orange-800">
+                    {summary.lateEarlyHours}時間
+                  </div>
                 </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
-                    <CalendarCheck className="h-3.5 w-3.5" />
-                    {t("paid-leave-days")}
-                  </span>
-                  <span className="text-base font-medium">{summary.paidLeaveDays}{t("days-suffix")}</span>
+                <div className="bg-indigo-50 p-4 rounded-lg">
+                  <div className="text-sm text-indigo-600 mb-1 flex items-center gap-1">
+                    <Calendar className="h-3.5 w-3.5" />
+                    有給休暇取得日数
+                  </div>
+                  <div className="text-2xl font-bold text-indigo-800">
+                    {summary.paidLeaveDays}日
+                  </div>
                 </div>
               </div>
 
               <div className="border rounded-lg border-gray-300 shadow-sm">
                 <div className="grid grid-cols-12 gap-0 p-2 bg-blue-50 dark:bg-gray-800 rounded-t-lg text-sm border-b border-gray-300">
-                  <div className="col-span-1 text-gray-500 font-medium flex items-center justify-center gap-1 px-6">
-                    <Calendar className="h-4 w-4" />
-                    {t("date")}
+                  <div className="col-span-1 text-sm font-medium text-[rgb(30,58,138)] bg-[rgb(239,246,255)] px-2 py-1.5 text-center">
+                    日付
                   </div>
-                  <div className="col-span-1 text-gray-500 font-medium flex items-center justify-center gap-1">
-                    <Clock className="h-4 w-4" />
-                    {t("start-time")}
+                  <div className="col-span-1 text-sm font-medium text-[rgb(30,58,138)] bg-[rgb(239,246,255)] px-2 py-1.5 text-center">
+                    開始時間
                   </div>
-                  <div className="col-span-1 text-gray-500 font-medium flex items-center justify-center gap-1">
-                    <Clock className="h-4 w-4" />
-                    {t("end-time")}
+                  <div className="col-span-1 text-sm font-medium text-[rgb(30,58,138)] bg-[rgb(239,246,255)] px-2 py-1.5 text-center">
+                    終了時間
                   </div>
-                  <div className="col-span-1 text-gray-500 font-medium flex items-center justify-center gap-1">
-                    <Timer className="h-4 w-4" />
-                    {t("break-time")}
+                  <div className="col-span-1 text-sm font-medium text-[rgb(30,58,138)] bg-[rgb(239,246,255)] px-2 py-1.5 text-center">
+                    休憩時間
                   </div>
-                  <div className="col-span-1 text-gray-500 font-medium flex items-center justify-center gap-1">
-                    <CalendarClock className="h-4 w-4" />
-                    {t("actual-time")}
+                  <div className="col-span-1 text-sm font-medium text-[rgb(30,58,138)] bg-[rgb(239,246,255)] px-2 py-1.5 text-center">
+                    実働時間
                   </div>
-                  <div className="col-span-2 text-gray-500 font-medium flex items-center gap-1">
-                    <Briefcase className="h-4 w-4" />
-                    {t("attendance-type")}
+                  <div className="col-span-2 text-sm font-medium text-[rgb(30,58,138)] bg-[rgb(239,246,255)] px-2 py-1.5 text-center">
+                    勤務区分
                   </div>
-                  <div className="col-span-4 text-gray-500 font-medium flex items-center gap-1">
-                    <Info className="h-4 w-4" />
+                  <div className="col-span-4 text-sm font-medium text-[rgb(30,58,138)] bg-[rgb(239,246,255)] px-2 py-1.5 text-center">
                     作業内容
                   </div>
-                  <div className="col-span-1 text-gray-500 font-medium flex items-center justify-center gap-1">
-                    <ArrowLeftRight className="h-4 w-4" />
-                    {t("late-early-hours")}
+                  <div className="col-span-1 text-sm font-medium text-[rgb(30,58,138)] bg-[rgb(239,246,255)] px-2 py-1.5 text-center">
+                    遅刻早退時間
                   </div>
                 </div>
 

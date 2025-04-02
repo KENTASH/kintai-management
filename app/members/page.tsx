@@ -1735,19 +1735,19 @@ export default function MembersPage() {
                     <Table>
                       <TableHeader>
                         <TableRow className="[&>th]:px-0 [&>th]:text-center">
-                          <TableHead className="w-[6%]">{t("employee-id")}</TableHead>
-                          <TableHead className="w-[10%]">所属</TableHead>
-                          <TableHead className="w-[7%]">{t("last-name")}</TableHead>
-                          <TableHead className="w-[7%]">{t("first-name")}</TableHead>
-                          <TableHead className="w-[7%]">{t("last-name-en")}</TableHead>
-                          <TableHead className="w-[7%]">{t("first-name-en")}</TableHead>
-                          <TableHead className="w-[11%]">{t("email")}</TableHead>
-                          <TableHead className="w-[10%]">担当リーダー</TableHead>
-                          <TableHead className="w-[10%]">担当サブリーダー</TableHead>
-                          <TableHead className="w-[6%]">{t("leader-permission")}</TableHead>
-                          <TableHead className="w-[6%]">{t("admin-permission")}</TableHead>
-                          <TableHead className="w-[9%]">ステータス</TableHead>
-                          <TableHead className="w-[4%]">操作</TableHead>
+                          <TableHead className="w-[6%] text-sm font-medium text-[rgb(30,58,138)] bg-[rgb(239,246,255)] px-2 py-1.5">{t("employee-id")}</TableHead>
+                          <TableHead className="w-[10%] text-sm font-medium text-[rgb(30,58,138)] bg-[rgb(239,246,255)] px-2 py-1.5">所属</TableHead>
+                          <TableHead className="w-[7%] text-sm font-medium text-[rgb(30,58,138)] bg-[rgb(239,246,255)] px-2 py-1.5">{t("last-name")}</TableHead>
+                          <TableHead className="w-[7%] text-sm font-medium text-[rgb(30,58,138)] bg-[rgb(239,246,255)] px-2 py-1.5">{t("first-name")}</TableHead>
+                          <TableHead className="w-[7%] text-sm font-medium text-[rgb(30,58,138)] bg-[rgb(239,246,255)] px-2 py-1.5">{t("last-name-en")}</TableHead>
+                          <TableHead className="w-[7%] text-sm font-medium text-[rgb(30,58,138)] bg-[rgb(239,246,255)] px-2 py-1.5">{t("first-name-en")}</TableHead>
+                          <TableHead className="w-[11%] text-sm font-medium text-[rgb(30,58,138)] bg-[rgb(239,246,255)] px-2 py-1.5">{t("email")}</TableHead>
+                          <TableHead className="w-[10%] text-sm font-medium text-[rgb(30,58,138)] bg-[rgb(239,246,255)] px-2 py-1.5">担当リーダー</TableHead>
+                          <TableHead className="w-[10%] text-sm font-medium text-[rgb(30,58,138)] bg-[rgb(239,246,255)] px-2 py-1.5">担当サブリーダー</TableHead>
+                          <TableHead className="w-[6%] text-sm font-medium text-[rgb(30,58,138)] bg-[rgb(239,246,255)] px-2 py-1.5">{t("leader-permission")}</TableHead>
+                          <TableHead className="w-[6%] text-sm font-medium text-[rgb(30,58,138)] bg-[rgb(239,246,255)] px-2 py-1.5">{t("admin-permission")}</TableHead>
+                          <TableHead className="w-[9%] text-sm font-medium text-[rgb(30,58,138)] bg-[rgb(239,246,255)] px-2 py-1.5">ステータス</TableHead>
+                          <TableHead className="w-[4%] text-sm font-medium text-[rgb(30,58,138)] bg-[rgb(239,246,255)] px-2 py-1.5">操作</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody className="[&>tr>td]:px-1">
