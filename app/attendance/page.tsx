@@ -315,13 +315,20 @@ export default function AttendancePage() {
   // 勤務状況のサマリーを計算
   const summary = useMemo(() => {
     const entries = Object.entries(attendanceData)
+    // 実働時間が存在する（ゼロではない）レコードを抽出
     const workingDays = entries.filter(([_, data]) => data.actualTime && data.actualTime !== "00:00")
+    
+    // 通常勤務日数: 休出以外で実働時間が存在するすべてのレコード
     const regularWorkDays = workingDays.filter(([_, data]) => 
-      !["holiday-work", "paid-leave", "am-leave", "pm-leave", "special-leave", 
-        "compensatory-leave", "compensatory-leave-planned", "absence", "late", 
-        "early-leave", "delay", "shift", "business-holiday"].includes(data.type || ""))
+      data.type !== "holiday-work"
+    )
+    
+    // 休日出勤日数
     const holidayWorkDays = workingDays.filter(([_, data]) => data.type === "holiday-work")
+    
+    // 欠勤日数
     const absenceDays = entries.filter(([_, data]) => data.type === "absence")
+    
     const actualTimes = workingDays.map(([_, data]) => data.actualTime)
     const lateEarlyHours = entries.reduce((acc, [_, data]) => {
       const hours = parseFloat(data.lateEarlyHours || "0")
@@ -332,6 +339,15 @@ export default function AttendancePage() {
       if (data.type === "am-leave" || data.type === "pm-leave") return acc + 0.5
       return acc
     }, 0)
+
+    // 計算結果をログ出力
+    console.log('勤怠集計計算:', {
+      全レコード: entries.length,
+      実働時間あり: workingDays.length,
+      通常勤務日数: regularWorkDays.length,
+      休出日数: holidayWorkDays.length,
+      欠勤日数: absenceDays.length
+    });
 
     return {
       totalWorkDays: workingDays.length,

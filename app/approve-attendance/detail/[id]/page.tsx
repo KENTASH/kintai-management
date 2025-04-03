@@ -28,7 +28,10 @@ import {
   Users,
   AlertTriangle,
   CalendarPlus,
-  CalendarX
+  CalendarX,
+  Bus,
+  CreditCard,
+  FileText
 } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
@@ -123,9 +126,39 @@ interface AttendanceDetail {
     breakTime: string
     actualTime: string
     type: string
+    work_type_code: string
     remarks: string
     lateEarlyHours: string
   }[]
+  expenses?: {
+    commuteExpenses: {
+      id: string
+      date: string
+      transportation: string
+      from: string
+      to: string
+      expenseType: string
+      roundTripType: string
+      amount: number
+      remarks: string
+    }[]
+    businessExpenses: {
+      id: string
+      date: string
+      transportation: string
+      from: string
+      to: string
+      expenseType: string
+      roundTripType: string
+      amount: number
+      remarks: string
+    }[]
+    receipts?: {
+      id: string
+      fileName: string
+      remarks: string
+    }[]
+  }
 }
 
 interface AttendanceRecord {
@@ -143,6 +176,30 @@ interface AttendanceRecord {
   is_early: boolean
   remarks: string | null
 }
+
+// 通勤費の種類
+const commuteTypes = [
+  { value: 'regular', label: '定期' },
+  { value: 'ticket', label: '切符' },
+  { value: 'parking', label: '駐輪場' },
+  { value: 'gasoline', label: 'ガソリン' },
+  { value: 'other', label: 'その他' }
+]
+
+// 業務経費の種類
+const businessTypes = [
+  { value: 'with-receipt', label: '経費（領収書有り）' },
+  { value: 'without-receipt', label: '経費（領収書無し）' },
+  { value: 'accommodation', label: '宿泊費' },
+  { value: 'per-diem', label: '宿泊日当' }
+]
+
+// 片道/往復の種類
+const roundTripTypes = [
+  { value: 'one-way', label: '片道' },
+  { value: 'round-trip', label: '往復' },
+  { value: 'other', label: 'その他' }
+]
 
 export default function AttendanceDetailPage() {
   const router = useRouter()
@@ -173,33 +230,67 @@ export default function AttendanceDetailPage() {
       paidLeaveDays: 0
     }
 
-    const workingDays = attendanceData.records.filter(record => 
-      record.actualTime && parseFloat(record.actualTime) > 0
+    // 総勤務時間と遅刻早退時間の計算
+    const totalWorkTime = attendanceData.records.reduce((sum, record) => 
+      sum + (record.actualTime ? parseFloat(record.actualTime) : 0), 0
     )
-    const regularWorkDays = workingDays.filter(record => 
-      !["holiday-work", "paid-leave", "am-leave", "pm-leave", "special-leave", 
-        "compensatory-leave", "compensatory-leave-planned", "absence", "late", 
-        "early-leave", "delay", "shift", "business-holiday"].includes(record.type)
-    )
-    const holidayWorkDays = workingDays.filter(record => record.type === "holiday-work")
-    const absenceDays = attendanceData.records.filter(record => record.type === "absence")
-    const totalWorkTime = workingDays.reduce((sum, record) => 
-      sum + (parseFloat(record.actualTime) || 0), 0
-    )
+    
     const lateEarlyHours = attendanceData.records.reduce((sum, record) => 
-      sum + (parseFloat(record.lateEarlyHours) || 0), 0
+      sum + (record.lateEarlyHours ? parseFloat(record.lateEarlyHours) : 0), 0
     )
+
+    // 休日出勤日数のカウント - 休出コードで実働時間がある
+    const holidayWorkRecords = attendanceData.records.filter(record => {
+      const isHolidayWork = record.work_type_code === 'holiday-work' || record.work_type_code === '10';
+      const hasActualTime = record.actualTime && parseFloat(record.actualTime) > 0;
+      return isHolidayWork && hasActualTime;
+    });
+    
+    const holidayWorkDays = holidayWorkRecords.length;
+
+    // 欠勤日数のカウント
+    const absenceRecords = attendanceData.records.filter(record => 
+      record.work_type_code === 'absence' || record.work_type_code === '06'
+    );
+    
+    const absenceDays = absenceRecords.length;
+
+    // 通常勤務日数のカウント:
+    // 実働時間があり、かつ休出でないレコード
+    const workingDaysRecords = attendanceData.records.filter(record => {
+      // 数値に変換された実働時間
+      const actualTimeValue = record.actualTime ? parseFloat(record.actualTime) : 0;
+      // 実働時間があるか
+      const hasActualTime = actualTimeValue > 0;
+      // 休出でないか
+      const isNotHolidayWork = record.work_type_code !== 'holiday-work' && record.work_type_code !== '10';
+      
+      return hasActualTime && isNotHolidayWork;
+    });
+    
+    const regularWorkDays = workingDaysRecords.length;
+
+    // 総勤務日数（実働時間が存在するレコードの件数）- 休出含む
+    const allWorkingDaysRecords = attendanceData.records.filter(record => {
+      const actualTimeValue = record.actualTime ? parseFloat(record.actualTime) : 0;
+      return actualTimeValue > 0;
+    });
+    
+    const totalWorkDays = allWorkingDaysRecords.length;
+
+    // 有給休暇日数の計算
     const paidLeaveDays = attendanceData.records.reduce((sum, record) => {
-      if (record.type === "paid-leave") return sum + 1
-      if (record.type === "am-leave" || record.type === "pm-leave") return sum + 0.5
-      return sum
-    }, 0)
+      if (record.work_type_code === 'paid-leave' || record.work_type_code === '02') return sum + 1;
+      if (record.work_type_code === 'am-leave' || record.work_type_code === 'pm-leave' || 
+          record.work_type_code === '03' || record.work_type_code === '04') return sum + 0.5;
+      return sum;
+    }, 0);
 
     return {
-      totalWorkDays: workingDays.length,
-      regularWorkDays: regularWorkDays.length,
-      holidayWorkDays: holidayWorkDays.length,
-      absenceDays: absenceDays.length,
+      totalWorkDays,
+      regularWorkDays,
+      holidayWorkDays,
+      absenceDays,
       totalWorkTime: totalWorkTime.toFixed(1),
       lateEarlyHours: lateEarlyHours.toFixed(1),
       paidLeaveDays: paidLeaveDays.toFixed(1)
@@ -249,6 +340,25 @@ export default function AttendanceDetailPage() {
     const dateStr = format(date, 'yyyy-MM-dd')
     return holidays.some(holiday => holiday.date === dateStr)
   }
+
+  // 経費の合計を計算
+  const expenseSummary = useMemo(() => {
+    if (!attendanceData?.expenses) return {
+      commuteTotal: 0,
+      businessTotal: 0
+    }
+
+    const commuteTotal = attendanceData.expenses.commuteExpenses
+      .reduce((sum, expense) => sum + expense.amount, 0)
+
+    const businessTotal = attendanceData.expenses.businessExpenses
+      .reduce((sum, expense) => sum + expense.amount, 0)
+
+    return {
+      commuteTotal,
+      businessTotal
+    }
+  }, [attendanceData?.expenses])
 
   // メッセージ表示用のコンポーネント
   const MessageAlert = () => {
@@ -376,6 +486,44 @@ export default function AttendanceDetailPage() {
 
         if (detailsError) throw detailsError
 
+        // 勤務区分の取得
+        const { data: workTypesData, error: workTypesError } = await supabase
+          .from('work_types')
+          .select('code, name_ja')
+          .order('code', { ascending: true })
+
+        if (workTypesError) throw workTypesError
+
+        // 経費データの取得
+        const { data: expenseHeaderData, error: expenseHeaderError } = await supabase
+          .from('expense_headers')
+          .select('id')
+          .eq('user_id', headerData.user_id)
+          .eq('year', headerData.year)
+          .eq('month', headerData.month)
+          .single()
+
+        if (expenseHeaderError) throw expenseHeaderError
+
+        // 経費明細の取得
+        const { data: expenseData, error: expenseError } = await supabase
+          .from('expense_details')
+          .select(`
+            id,
+            date,
+            transportation,
+            from_location,
+            to_location,
+            expense_type,
+            round_trip_type,
+            amount,
+            remarks,
+            category
+          `)
+          .eq('header_id', expenseHeaderData.id)
+
+        if (expenseError) throw expenseError
+
         // データの整形
         const formattedData: AttendanceDetail = {
           ...headerData,
@@ -391,16 +539,54 @@ export default function AttendanceDetailPage() {
             ...adminApproval,
             approverName: adminName
           } : null,
-          records: detailsData.map(detail => ({
-            date: detail.date,
-            startTime: detail.start_time ? detail.start_time.substring(0, 5) : '',
-            endTime: detail.end_time ? detail.end_time.substring(0, 5) : '',
-            breakTime: detail.break_time ? detail.break_time.toString() : '',
-            actualTime: detail.actual_working_hours ? detail.actual_working_hours.toFixed(1) : '',
-            type: detail.work_type_code,
-            remarks: detail.remarks || '',
-            lateEarlyHours: detail.late_early_hours ? detail.late_early_hours.toFixed(1) : ''
-          }))
+          records: detailsData.map(detail => {
+            return {
+              date: detail.date,
+              startTime: detail.start_time ? detail.start_time.substring(0, 5) : '',
+              endTime: detail.end_time ? detail.end_time.substring(0, 5) : '',
+              breakTime: detail.break_time ? detail.break_time.toString() : '',
+              actualTime: detail.actual_working_hours ? detail.actual_working_hours.toFixed(1) : '',
+              type: workTypesData?.find(type => type.code === detail.work_type_code)?.name_ja || detail.work_type_code,
+              work_type_code: detail.work_type_code || '',
+              remarks: detail.remarks || '',
+              lateEarlyHours: detail.late_early_hours ? detail.late_early_hours.toFixed(1) : ''
+            }
+          }),
+          expenses: {
+            commuteExpenses: expenseData
+              ?.filter(expense => expense.category === 'commute')
+              ?.map(expense => ({
+                id: expense.id,
+                date: expense.date,
+                transportation: expense.transportation,
+                from: expense.from_location,
+                to: expense.to_location,
+                expenseType: expense.expense_type,
+                roundTripType: expense.round_trip_type,
+                amount: expense.amount,
+                remarks: expense.remarks || ''
+              })) || [],
+            businessExpenses: expenseData
+              ?.filter(expense => expense.category === 'business')
+              ?.map(expense => ({
+                id: expense.id,
+                date: expense.date,
+                transportation: expense.transportation,
+                from: expense.from_location,
+                to: expense.to_location,
+                expenseType: expense.expense_type,
+                roundTripType: expense.round_trip_type,
+                amount: expense.amount,
+                remarks: expense.remarks || ''
+              })) || [],
+            receipts: expenseData
+              ?.filter(expense => expense.category === 'receipt')
+              ?.map(expense => ({
+                id: expense.id,
+                fileName: expense.remarks || '',
+                remarks: expense.remarks || ''
+              })) || []
+          }
         }
 
         setAttendanceData(formattedData)
@@ -565,21 +751,21 @@ export default function AttendanceDetailPage() {
 
           {/* 承認ボタン */}
           <div className="flex items-center gap-2 ml-4">
-            <Button
+          <Button
               variant="outline"
-              onClick={() => setShowRejectionDialog(true)}
+            onClick={() => setShowRejectionDialog(true)}
               className="bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 border-red-200"
-            >
-              <X className="h-4 w-4 mr-2" />
-              差戻し
-            </Button>
-            <Button
-              onClick={handleApprove}
+          >
+            <X className="h-4 w-4 mr-2" />
+            差戻し
+          </Button>
+          <Button
+            onClick={handleApprove}
               className="bg-blue-600 hover:bg-blue-700 text-white"
-            >
-              <Check className="h-4 w-4 mr-2" />
-              承認
-            </Button>
+          >
+            <Check className="h-4 w-4 mr-2" />
+            承認
+          </Button>
           </div>
         </div>
       </div>
@@ -591,8 +777,8 @@ export default function AttendanceDetailPage() {
           <TabsTrigger value="business">業務請求</TabsTrigger>
         </TabsList>
         <TabsContent value="attendance">
-          <Card>
-            <CardContent className="pt-6">
+      <Card>
+        <CardContent className="pt-6">
               <div className="space-y-6">
                 {/* 基本情報 */}
                 <div className="flex items-center gap-4 text-lg">
@@ -601,7 +787,7 @@ export default function AttendanceDetailPage() {
                     <span className="text-blue-800">{attendanceData?.branch?.name}</span>
                     <span className="text-gray-600">{attendanceData?.user?.employee_id}</span>
                     <span className="text-gray-800">{attendanceData?.user?.last_name} {attendanceData?.user?.first_name}</span>
-                  </div>
+              </div>
                   <div className="flex items-center gap-4">
                     <span className="text-gray-600">{attendanceData?.year}年{attendanceData?.month}月</span>
                     <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-sm font-medium ${
@@ -611,16 +797,16 @@ export default function AttendanceDetailPage() {
                       attendanceData?.status === '03' ? 'bg-red-100 text-red-800' :
                       'bg-gray-100 text-gray-800'
                     }`}>
-                      {(() => {
+                {(() => {
                         switch (attendanceData?.status) {
                           case '00': return '下書き';
-                          case '01': return '申請中';
-                          case '02': return '承認済';
-                          case '03': return '差戻し';
+                    case '01': return '申請中';
+                    case '02': return '承認済';
+                    case '03': return '差戻し';
                           case '04': return '総務承認済';
                           default: return '不明';
-                        }
-                      })()}
+                  }
+                })()}
                     </span>
                   </div>
                 </div>
@@ -688,39 +874,39 @@ export default function AttendanceDetailPage() {
                     </div>
                     <div className="text-2xl font-bold text-indigo-800">
                       {summary.paidLeaveDays}日
-                    </div>
-                  </div>
-                </div>
+              </div>
+            </div>
+          </div>
 
-                <div className="border rounded-lg border-gray-300 shadow-sm">
-                  <div className="grid grid-cols-12 gap-0 p-2 bg-blue-50 dark:bg-gray-800 rounded-t-lg text-sm border-b border-gray-300">
+          <div className="border rounded-lg border-gray-300 shadow-sm">
+            <div className="grid grid-cols-12 gap-0 p-2 bg-blue-50 dark:bg-gray-800 rounded-t-lg text-sm border-b border-gray-300">
                     <div className="col-span-1 text-sm font-medium text-[rgb(30,58,138)] bg-[rgb(239,246,255)] px-2 py-1.5 text-center">
-                      日付
-                    </div>
+                日付
+              </div>
                     <div className="col-span-1 text-sm font-medium text-[rgb(30,58,138)] bg-[rgb(239,246,255)] px-2 py-1.5 text-center">
                       開始時間
-                    </div>
+              </div>
                     <div className="col-span-1 text-sm font-medium text-[rgb(30,58,138)] bg-[rgb(239,246,255)] px-2 py-1.5 text-center">
                       終了時間
-                    </div>
+              </div>
                     <div className="col-span-1 text-sm font-medium text-[rgb(30,58,138)] bg-[rgb(239,246,255)] px-2 py-1.5 text-center">
                       休憩時間
-                    </div>
+              </div>
                     <div className="col-span-1 text-sm font-medium text-[rgb(30,58,138)] bg-[rgb(239,246,255)] px-2 py-1.5 text-center">
                       実働時間
-                    </div>
+              </div>
                     <div className="col-span-2 text-sm font-medium text-[rgb(30,58,138)] bg-[rgb(239,246,255)] px-2 py-1.5 text-center">
                       勤務区分
-                    </div>
+              </div>
                     <div className="col-span-4 text-sm font-medium text-[rgb(30,58,138)] bg-[rgb(239,246,255)] px-2 py-1.5 text-center">
-                      作業内容
-                    </div>
+                作業内容
+              </div>
                     <div className="col-span-1 text-sm font-medium text-[rgb(30,58,138)] bg-[rgb(239,246,255)] px-2 py-1.5 text-center">
                       遅刻早退時間
-                    </div>
-                  </div>
+              </div>
+            </div>
 
-                  <div className="divide-y divide-gray-300">
+            <div className="divide-y divide-gray-300">
                     {getMonthDays.map((date) => {
                       const record = getAttendanceRecord(date)
                       const dateKey = format(date, 'yyyy-MM-dd')
@@ -738,61 +924,49 @@ export default function AttendanceDetailPage() {
                         >
                           <div className={`col-span-1 text-sm font-medium px-6 ${isWeekend || isHolidayDate ? 'text-red-600' : ''}`}>
                             {format(date, 'M/d')}({format(date, 'E', { locale: ja })})
-                          </div>
-                          <div className="col-span-1 px-2">
-                            <div className="h-7 flex items-center justify-center font-medium text-sm">
+                  </div>
+                  <div className="col-span-1 px-2">
+                    <div className="h-7 flex items-center justify-center font-medium text-sm">
                               {record?.startTime || ''}
-                            </div>
-                          </div>
-                          <div className="col-span-1 px-2">
-                            <div className="h-7 flex items-center justify-center font-medium text-sm">
+                    </div>
+                  </div>
+                  <div className="col-span-1 px-2">
+                    <div className="h-7 flex items-center justify-center font-medium text-sm">
                               {record?.endTime || ''}
-                            </div>
-                          </div>
-                          <div className="col-span-1 px-2">
-                            <div className="h-7 flex items-center justify-center font-medium text-sm">
+                    </div>
+                  </div>
+                  <div className="col-span-1 px-2">
+                    <div className="h-7 flex items-center justify-center font-medium text-sm">
                               {record?.breakTime ? `${String(Math.floor(parseInt(record.breakTime) / 60)).padStart(2, '0')}:${String(parseInt(record.breakTime) % 60).padStart(2, '0')}` : ''}
-                            </div>
-                          </div>
-                          <div className="col-span-1 px-2">
-                            <div className="h-7 flex items-center justify-center font-medium text-sm">
+                    </div>
+                  </div>
+                  <div className="col-span-1 px-2">
+                    <div className="h-7 flex items-center justify-center font-medium text-sm">
                               {record?.actualTime ? `${String(Math.floor(parseFloat(record.actualTime))).padStart(2, '0')}:${String(Math.round((parseFloat(record.actualTime) % 1) * 60)).padStart(2, '0')}` : ''}
-                            </div>
-                          </div>
-                          <div className="col-span-2 px-2">
-                            <div className="h-7 flex items-center px-3 font-medium text-sm">
-                              {(() => {
-                                if (!record?.type) return ''
-                                switch (record.type) {
-                                  case 'holiday-work': return '休出';
-                                  case 'paid-leave': return '有休';
-                                  case 'am-leave': return '前休';
-                                  case 'pm-leave': return '後休';
-                                  case 'special-leave': return '特休';
-                                  case 'compensatory-leave': return '振休';
-                                  case 'compensatory-leave-planned': return '振予';
-                                  case 'absence': return '欠勤';
-                                  case 'late': return '遅刻';
-                                  case 'early-leave': return '早退';
-                                  case 'delay': return '遅延';
-                                  case 'shift': return 'シフト';
-                                  case 'business-holiday': return '休業';
-                                  default: return '';
-                                }
-                              })()}
-                            </div>
-                          </div>
-                          <div className="col-span-4 px-2">
-                            <div className="h-7 flex items-center font-medium text-sm">
+                    </div>
+                  </div>
+                  <div className="col-span-2 px-2">
+                    <div className="h-7 flex items-center px-3 font-medium text-sm">
+                      {(() => {
+                        if (!record?.work_type_code || record.work_type_code === '01' || record.work_type_code === '') {
+                          return '';
+                        }
+                        
+                        return record?.type || '';
+                      })()}
+                    </div>
+                  </div>
+                  <div className="col-span-4 px-2">
+                    <div className="h-7 flex items-center font-medium text-sm">
                               {record?.remarks || ''}
-                            </div>
-                          </div>
-                          <div className="col-span-1 px-2">
-                            <div className="h-7 flex items-center justify-center font-medium text-sm">
+                    </div>
+                  </div>
+                  <div className="col-span-1 px-2">
+                    <div className="h-7 flex items-center justify-center font-medium text-sm">
                               {record?.lateEarlyHours || ''}
-                            </div>
-                          </div>
-                        </div>
+                    </div>
+                  </div>
+                </div>
                       )
                     })}
                   </div>
@@ -804,9 +978,149 @@ export default function AttendanceDetailPage() {
         <TabsContent value="expense">
           <Card>
             <CardContent className="pt-6">
-              <div className="text-center text-gray-500">経費請求情報は現在準備中です</div>
-            </CardContent>
-          </Card>
+              <div className="space-y-6">
+                {/* 経費サマリー */}
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                  <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
+                    <div className="flex items-center gap-2 text-blue-700 mb-1">
+                      <Bus className="h-5 w-5" />
+                      <div className="text-sm font-medium">通勤費合計</div>
+                    </div>
+                    <div className="text-2xl font-bold text-blue-800">
+                      ¥{expenseSummary.commuteTotal.toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="p-4 bg-green-50 rounded-lg border border-green-100">
+                    <div className="flex items-center gap-2 text-green-700 mb-1">
+                      <Briefcase className="h-5 w-5" />
+                      <div className="text-sm font-medium">業務経費合計</div>
+                    </div>
+                    <div className="text-2xl font-bold text-green-800">
+                      ¥{expenseSummary.businessTotal.toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 通勤費セクション */}
+                <div className="mb-8">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Bus className="h-5 w-5 text-blue-600" />
+                    <h2 className="text-lg font-semibold text-blue-800">通勤費</h2>
+                  </div>
+
+                  <div className="border rounded-lg border-gray-200 overflow-hidden mb-6">
+                    <div className="grid grid-cols-8 gap-0 p-2 bg-blue-50 text-sm border-b border-gray-200">
+                      <div className="col-span-1 text-blue-700 font-medium px-2">発生日</div>
+                      <div className="col-span-1 text-blue-700 font-medium px-2">交通機関</div>
+                      <div className="col-span-2 text-blue-700 font-medium px-2">区間</div>
+                      <div className="col-span-1 text-blue-700 font-medium px-2">種類</div>
+                      <div className="col-span-1 text-blue-700 font-medium px-2">片道/往復</div>
+                      <div className="col-span-1 text-blue-700 font-medium px-2">金額</div>
+                      <div className="col-span-1 text-blue-700 font-medium px-2">目的・備考</div>
+                    </div>
+
+                    <div className="divide-y divide-gray-100">
+                      {attendanceData?.expenses?.commuteExpenses?.map((expense) => (
+                        <div 
+                          key={expense.id} 
+                          className="grid grid-cols-8 gap-0 p-1.5 hover:bg-blue-50/50 items-center"
+                        >
+                          <div className="col-span-1 px-2 text-sm">{expense.date}</div>
+                          <div className="col-span-1 px-2 text-sm">{expense.transportation}</div>
+                          <div className="col-span-2 px-2 text-sm">{expense.from} → {expense.to}</div>
+                          <div className="col-span-1 px-2 text-sm">
+                            {commuteTypes.find(type => type.value === expense.expenseType)?.label || '不明'}
+                          </div>
+                          <div className="col-span-1 px-2 text-sm">
+                            {roundTripTypes.find(type => type.value === expense.roundTripType)?.label || '不明'}
+                          </div>
+                          <div className="col-span-1 px-2 text-sm">¥{expense.amount.toLocaleString()}</div>
+                          <div className="col-span-1 px-2 text-sm">{expense.remarks}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 業務経費セクション */}
+                <div className="mb-8">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Briefcase className="h-5 w-5 text-green-600" />
+                    <h2 className="text-lg font-semibold text-green-800">業務経費</h2>
+                  </div>
+
+                  <div className="border rounded-lg border-gray-200 overflow-hidden mb-6">
+                    <div className="grid grid-cols-8 gap-0 p-2 bg-green-50 text-sm border-b border-gray-200">
+                      <div className="col-span-1 text-green-700 font-medium px-2">発生日</div>
+                      <div className="col-span-1 text-green-700 font-medium px-2">交通機関/宿泊先</div>
+                      <div className="col-span-2 text-green-700 font-medium px-2">区間</div>
+                      <div className="col-span-1 text-green-700 font-medium px-2">費目</div>
+                      <div className="col-span-1 text-green-700 font-medium px-2">片道/往復</div>
+                      <div className="col-span-1 text-green-700 font-medium px-2">金額</div>
+                      <div className="col-span-1 text-green-700 font-medium px-2">目的・備考</div>
+                    </div>
+
+                    <div className="divide-y divide-gray-100">
+                      {attendanceData?.expenses?.businessExpenses?.map((expense) => (
+                        <div 
+                          key={expense.id} 
+                          className="grid grid-cols-8 gap-0 p-1.5 hover:bg-green-50/50 items-center"
+                        >
+                          <div className="col-span-1 px-2 text-sm">{expense.date}</div>
+                          <div className="col-span-1 px-2 text-sm">{expense.transportation}</div>
+                          <div className="col-span-2 px-2 text-sm">{expense.from} → {expense.to}</div>
+                          <div className="col-span-1 px-2 text-sm">
+                            {businessTypes.find(type => type.value === expense.expenseType)?.label || '不明'}
+                          </div>
+                          <div className="col-span-1 px-2 text-sm">
+                            {roundTripTypes.find(type => type.value === expense.roundTripType)?.label || '不明'}
+                          </div>
+                          <div className="col-span-1 px-2 text-sm">¥{expense.amount.toLocaleString()}</div>
+                          <div className="col-span-1 px-2 text-sm">{expense.remarks}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 領収書セクション */}
+                <div className="mt-8">
+                  <div className="flex items-center gap-2 mb-4">
+                    <FileText className="h-5 w-5 text-purple-600" />
+                    <h2 className="text-lg font-semibold text-purple-800">領収書・定期券</h2>
+                  </div>
+                  <div className="border rounded-lg border-gray-200 overflow-hidden max-w-2xl">
+                    <div className="grid grid-cols-3 gap-0 p-2 bg-gray-50 text-sm border-b border-gray-200">
+                      <div className="col-span-2 text-gray-700 font-medium px-2">ファイル名</div>
+                      <div className="col-span-1 text-gray-700 font-medium px-2">備考</div>
+                    </div>
+                    <div className="divide-y divide-gray-100">
+                      {attendanceData?.expenses?.receipts?.map((receipt) => (
+                        <div 
+                          key={receipt.id} 
+                          className="grid grid-cols-3 gap-0 p-1.5 hover:bg-gray-50/50 items-center"
+                        >
+                          <div className="col-span-2 px-2">
+                            <button
+                              onClick={() => {
+                                // ファイルビューワーの実装は後ほど
+                              }}
+                              className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                            >
+                              {receipt.fileName}
+                            </button>
+                          </div>
+                          <div className="col-span-1 px-2 text-sm">
+                            {receipt.remarks}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
         </TabsContent>
         <TabsContent value="business">
           <Card>
