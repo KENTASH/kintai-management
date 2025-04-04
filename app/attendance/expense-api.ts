@@ -32,6 +32,8 @@ export interface ReceiptRecord {
   fileName: string;
   fileUrl: string;
   filePath: string;
+  fileSize?: number;
+  fileType?: string;
   remarks?: string;
   uploadedAt: string;
 }
@@ -152,6 +154,8 @@ export async function fetchExpenseData(
       fileName: item.file_name,
       fileUrl: '', // 公開URLは別途取得が必要
       filePath: item.file_path,
+      fileSize: item.file_size,
+      fileType: item.file_type,
       remarks: item.remarks || '',
       uploadedAt: item.uploaded_at || new Date().toISOString()
     })) || [];
@@ -159,10 +163,19 @@ export async function fetchExpenseData(
     // 領収書の公開URLを取得
     for (const receipt of receipts) {
       if (receipt.filePath) {
-        const { data } = supabase.storage
-          .from('receipts')
-          .getPublicUrl(receipt.filePath);
-        receipt.fileUrl = data.publicUrl;
+        try {
+          console.log('領収書ファイルパス:', receipt.filePath);
+          // 正しいバケット名を使用（実際のバケット名に合わせて変更）
+          const { data } = supabase.storage
+            .from('expense-evidences')
+            .getPublicUrl(receipt.filePath);
+          
+          receipt.fileUrl = data.publicUrl;
+          console.log('取得した公開URL:', data.publicUrl);
+        } catch (error) {
+          console.error('領収書の公開URL取得エラー:', error);
+          receipt.fileUrl = '';
+        }
       }
     }
 
@@ -376,10 +389,14 @@ export async function saveExpenseData(
 
       // 領収書データを保存
       if (data.receipts.length > 0) {
+        console.log('領収書データを保存します - ユーザーID:', userId);
+        
         const receiptDetails = data.receipts.map(receipt => ({
           header_id: headerId,
           file_name: receipt.fileName,
           file_path: receipt.filePath,
+          file_size: receipt.fileSize,
+          file_type: receipt.fileType,
           remarks: receipt.remarks || null,
           uploaded_at: receipt.uploadedAt,
           created_by: userId,
@@ -388,13 +405,20 @@ export async function saveExpenseData(
           updated_at: new Date().toISOString()
         }));
 
-        const { error: receiptError } = await supabase
-          .from('expense_receipts')
-          .insert(receiptDetails);
+        console.log('保存する領収書データ:', JSON.stringify(receiptDetails));
 
-        if (receiptError) {
-          console.error('領収書保存エラー:', receiptError);
-          throw new Error('領収書の保存に失敗しました');
+        try {
+          const { error: receiptError } = await supabase
+            .from('expense_receipts')
+            .insert(receiptDetails);
+
+          if (receiptError) {
+            console.error('領収書保存エラー:', receiptError);
+            throw new Error('領収書の保存に失敗しました');
+          }
+        } catch (error) {
+          console.error('領収書保存中に例外が発生しました:', error);
+          throw new Error('領収書の保存中に例外が発生しました');
         }
       }
 

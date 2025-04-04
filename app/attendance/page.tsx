@@ -301,6 +301,8 @@ export default function AttendancePage() {
     fileName: '',
     fileUrl: '',
     filePath: '',
+    fileSize: 0,
+    fileType: '',
     remarks: '',
     uploadedAt: new Date().toISOString()
   })
@@ -1211,34 +1213,79 @@ export default function AttendancePage() {
     setUploadError(null)
 
     try {
-      // ファイル名を一意にするためのタイムスタンプを追加
-      const timestamp = new Date().getTime()
-      const uniqueFileName = `${timestamp}_${file.name}`
-      const filePath = `receipts/${uniqueFileName}`
+      // 画像形式チェック
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'application/pdf']
+      if (!allowedTypes.includes(file.type)) {
+        throw new Error('画像ファイル（JPEG, PNG, GIF）またはPDFのみアップロード可能です')
+      }
+
+      // ファイルサイズチェック（10MB上限）
+      const maxFileSize = 10 * 1024 * 1024 // 10MB
+      if (file.size > maxFileSize) {
+        throw new Error(`ファイルサイズは10MB以下にしてください（現在: ${(file.size / (1024 * 1024)).toFixed(2)}MB）`)
+      }
+
+      // 年月を取得
+      const currentYear = currentDate.getFullYear()
+      const currentMonth = String(currentDate.getMonth() + 1).padStart(2, '0')
+      
+      // ユーザー情報が取得できない場合はエラー
+      if (!userInfo || !branchInfo) {
+        throw new Error('ユーザー情報が取得できません。再ログインしてください。')
+      }
+
+      // 所属+社員番号のディレクトリ名
+      const userDir = `${branchInfo.code}_${userInfo.employee_id}`
+      
+      // ファイル名を安全に処理
+      const originalFileName = file.name;
+      
+      // 拡張子を取得
+      const fileExt = originalFileName.split('.').pop() || '';
+      
+      // 安全なファイル名を生成（タイムスタンプ + ランダム文字列 + 拡張子）
+      const timestamp = new Date().getTime();
+      const randomStr = Math.random().toString(36).substring(2, 10);
+      const safeFileName = `${timestamp}_${randomStr}.${fileExt}`;
+      
+      // 保存先のパス: 「年/月/所属_社員番号/安全なファイル名」
+      const filePath = `${currentYear}/${currentMonth}/${userDir}/${safeFileName}`;
+
+      console.log('ファイルアップロード試行:', {
+        originalFileName,
+        safeFileName,
+        filePath,
+        fileSize: file.size,
+        fileType: file.type
+      });
 
       // Supabase Storageにファイルをアップロード
       const { data, error } = await supabase.storage
-        .from('receipts')
-        .upload(filePath, file)
+        .from('expense-evidences')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
 
-      if (error) throw error
+      if (error) throw error;
 
       // アップロードしたファイルのURLを取得
-      const { data: { publicUrl } } = supabase.storage
-        .from('receipts')
-        .getPublicUrl(filePath)
+      const { data: urlData } = supabase.storage
+        .from('expense-evidences')
+        .getPublicUrl(filePath);
 
-      // 新しい領収書レコードを作成
-      const newReceipt: ReceiptRecord = {
+      // 新しい領収書データを作成
+      setNewReceipt({
         id: Date.now().toString(),
-        fileName: file.name,
-        fileUrl: publicUrl,
+        fileName: originalFileName, // 画面表示用には元のファイル名を使用
+        fileUrl: urlData.publicUrl,
+        filePath: filePath, // 保存には安全なパスを使用
+        fileSize: file.size,
+        fileType: file.type,
         remarks: '',
-        uploadedAt: new Date().toISOString(),
-        filePath: filePath
-      }
+        uploadedAt: new Date().toISOString()
+      })
 
-      setReceipts([...receipts, newReceipt])
       setMessageWithStability({ 
         type: 'success', 
         text: 'ファイルをアップロードしました',
@@ -1246,10 +1293,10 @@ export default function AttendancePage() {
       })
     } catch (error) {
       console.error('ファイルアップロードエラー:', error)
-      setUploadError('ファイルのアップロードに失敗しました')
+      setUploadError(error instanceof Error ? error.message : 'ファイルのアップロードに失敗しました')
       setMessageWithStability({ 
         type: 'error', 
-        text: 'ファイルのアップロードに失敗しました',
+        text: error instanceof Error ? error.message : 'ファイルのアップロードに失敗しました',
         persistent: true
       })
     } finally {
@@ -1271,13 +1318,16 @@ export default function AttendancePage() {
 
     try {
       // Supabase Storageからファイルを削除
-      const filePath = receipt.fileUrl.split('/').pop()
-      if (filePath) {
+      if (receipt.filePath) {
+        console.log('削除する領収書ファイルパス:', receipt.filePath);
         const { error } = await supabase.storage
-          .from('receipts')
-          .remove([filePath])
+          .from('expense-evidences')
+          .remove([receipt.filePath])
 
-        if (error) throw error
+        if (error) {
+          console.error('ファイル削除エラー詳細:', error);
+          throw error;
+        }
       }
 
       // 状態から削除
@@ -1542,6 +1592,48 @@ export default function AttendancePage() {
       if (timer) clearTimeout(timer)
     }
   }, [message])
+
+  // 領収書の追加
+  const handleAddReceipt = () => {
+    if (!newReceipt.fileUrl || !newReceipt.fileName) {
+      setUploadError('ファイルを選択してください。');
+      return;
+    }
+
+    const receipt: ReceiptRecord = {
+      id: newReceipt.id || Date.now().toString(),
+      fileName: newReceipt.fileName || '',
+      fileUrl: newReceipt.fileUrl || '',
+      filePath: newReceipt.filePath || '',
+      fileSize: newReceipt.fileSize || 0,
+      fileType: newReceipt.fileType || '',
+      remarks: newReceipt.remarks || '',
+      uploadedAt: newReceipt.uploadedAt || new Date().toISOString()
+    };
+
+    setReceipts([...receipts, receipt]);
+    setShowReceiptInput(false);
+    
+    // 入力フィールドをリセット
+    setNewReceipt({
+      id: Date.now().toString(),
+      fileName: '',
+      fileUrl: '',
+      filePath: '',
+      fileSize: 0,
+      fileType: '',
+      remarks: '',
+      uploadedAt: new Date().toISOString()
+    });
+    
+    setMessageWithStability({ 
+      type: 'success', 
+      text: '領収書を追加しました', 
+      position: 'bottom' 
+    });
+    
+    setHasUnsavedChanges(true);
+  };
 
   return (
     <div className="space-y-6 relative z-[1]">
@@ -2386,43 +2478,39 @@ export default function AttendancePage() {
                 </div>
 
                 <div className="border rounded-lg border-gray-200 overflow-hidden max-w-2xl">
-                  <div className="grid grid-cols-3 gap-0 p-2 bg-gray-50 text-sm border-b border-gray-200">
-                    <div className="col-span-2 text-gray-700 font-medium px-2">ファイル名</div>
-                    <div className="col-span-1 text-gray-700 font-medium px-2">備考</div>
+                  <div className="grid grid-cols-12 gap-0 p-2 bg-gray-50 text-sm border-b border-gray-200">
+                    <div className="col-span-6 text-gray-700 font-medium px-2">ファイル名</div>
+                    <div className="col-span-4 text-gray-700 font-medium px-2">備考</div>
+                    <div className="col-span-2 text-gray-700 font-medium px-2">操作</div>
                   </div>
 
                   <div className="divide-y divide-gray-100">
                     {receipts.map((receipt) => (
                       <div 
                         key={receipt.id} 
-                        className="grid grid-cols-3 gap-0 p-1.5 hover:bg-gray-50/50 items-center"
+                        className="grid grid-cols-12 gap-0 p-1.5 hover:bg-gray-50/50 items-center"
                       >
-                        <div className="col-span-2 px-2">
+                        <div className="col-span-6 px-2 text-left">
                           <button
                             onClick={() => {
                               setSelectedReceipt(receipt)
                               setShowReceiptViewer(true)
                             }}
-                            className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                            className="text-sm text-blue-600 hover:text-blue-800 hover:underline text-left"
                           >
                             {receipt.fileName}
                           </button>
                         </div>
-                        <div className="col-span-1 px-2">
-                          <Input
-                            value={receipt.remarks}
-                            onChange={(e) => handleReceiptRemarksChange(receipt.id, e.target.value)}
-                            className="h-7 text-sm"
-                            placeholder="備考を入力"
-                          />
+                        <div className="col-span-4 px-2">
+                          <span className="text-sm text-gray-700">{receipt.remarks || '―'}</span>
                         </div>
-                        <div className="col-span-1 px-2">
+                        <div className="col-span-2 px-2">
                           {(status === '00' || status === '03') && (
                             <Button
                               variant="ghost"
                               size="icon"
                               onClick={() => handleDeleteReceipt(receipt.id)}
-                              className="h-7 w-7"
+                              className="h-7 w-7 justify-start p-0"
                             >
                               <Trash2 className="h-3.5 w-3.5 text-red-500" />
                             </Button>
@@ -2530,25 +2618,41 @@ export default function AttendancePage() {
                         <Button
                           onClick={() => {
                             if (newReceipt?.fileUrl && newReceipt?.fileName) {
-                              const filePath = newReceipt.fileUrl.split('?')[0].split('/').slice(-1)[0];
+                              // 新しい領収書レコードを作成して追加
                               const receipt: ReceiptRecord = {
                                 id: Date.now().toString(),
                                 fileName: newReceipt.fileName,
                                 fileUrl: newReceipt.fileUrl,
-                                filePath: filePath,
+                                filePath: newReceipt.filePath || '',
+                                fileSize: newReceipt.fileSize || 0,
+                                fileType: newReceipt.fileType || '',
                                 remarks: newReceipt.remarks || '',
-                                uploadedAt: new Date().toISOString()
+                                uploadedAt: newReceipt.uploadedAt || new Date().toISOString()
                               }
+                              // 領収書リストに追加
                               setReceipts([...receipts, receipt])
+                              // モーダルを閉じる
                               setShowReceiptInput(false)
+                              // 新規領収書情報をリセット
                               setNewReceipt({
                                 id: Date.now().toString(),
                                 fileName: '',
                                 fileUrl: '',
                                 filePath: '',
+                                fileSize: 0,
+                                fileType: '',
                                 remarks: '',
                                 uploadedAt: new Date().toISOString()
                               })
+                              // 成功メッセージを表示
+                              setMessageWithStability({ 
+                                type: 'success', 
+                                text: '領収書を追加しました',
+                                position: 'bottom'
+                              })
+                            } else {
+                              // ファイルが選択されていない場合はエラー
+                              setUploadError('ファイルを選択してください')
                             }
                           }}
                           disabled={!newReceipt?.fileUrl}
@@ -2571,37 +2675,95 @@ export default function AttendancePage() {
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.2 }}
                     className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+                    onClick={(e) => {
+                      if (e.target === e.currentTarget) {
+                        setShowReceiptViewer(false);
+                      }
+                    }}
                   >
                     <motion.div
                       initial={{ opacity: 0, scale: 0.95 }}
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.95 }}
                       transition={{ duration: 0.2 }}
-                      className="bg-white rounded-lg p-6 w-[90vw] h-[90vh] flex flex-col"
+                      className="bg-white rounded-lg p-4 w-full max-w-3xl h-auto max-h-[80vh] flex flex-col m-4"
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-semibold">{selectedReceipt.fileName}</h3>
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-lg font-semibold truncate mr-2">{selectedReceipt.fileName}</h3>
                         <Button
                           variant="ghost"
                           size="icon"
                           onClick={() => setShowReceiptViewer(false)}
+                          className="flex-shrink-0"
                         >
                           <X className="h-4 w-4" />
                         </Button>
                       </div>
-                      <div className="flex-1 overflow-auto">
-                        {selectedReceipt.fileUrl.match(/\.(jpg|jpeg|png|gif)$/i) ? (
-                          <img
-                            src={selectedReceipt.fileUrl}
-                            alt={selectedReceipt.fileName}
-                            className="max-w-full h-auto"
-                          />
+                      <div className="flex-1 overflow-auto bg-gray-100 rounded p-2 flex items-center justify-center">
+                        {selectedReceipt?.fileUrl ? (
+                          selectedReceipt.fileUrl.match(/\.(jpg|jpeg|png|gif)$/i) ? (
+                            <>
+                              <img
+                                src={selectedReceipt.fileUrl}
+                                alt={selectedReceipt.fileName}
+                                className="max-w-full max-h-[calc(80vh-6rem)] object-contain"
+                                onLoad={() => console.log('画像ロード成功:', selectedReceipt.fileUrl)}
+                                onError={(e) => {
+                                  console.error('画像ロードエラー:', selectedReceipt.fileUrl);
+                                  const target = e.target as HTMLImageElement;
+                                  target.onerror = null;
+                                  target.style.display = 'none';
+                                  
+                                  // エラーメッセージを表示する要素を作成
+                                  const errorDiv = document.createElement('div');
+                                  errorDiv.className = 'text-center p-4 text-gray-500';
+                                  errorDiv.innerHTML = `
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto mb-2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                    </svg>
+                                    <p>画像の読み込みに失敗しました</p>
+                                    <p class="text-sm mt-1">URLが正しくない可能性があります</p>
+                                    <p class="text-xs mt-1 text-gray-400">${selectedReceipt.fileUrl}</p>
+                                  `;
+                                  target.parentNode?.appendChild(errorDiv);
+                                }}
+                              />
+                              {/* 画像情報をコンソールに出力 */}
+                              {(() => {
+                                console.log('レンダリング中の画像:', {
+                                  fileUrl: selectedReceipt.fileUrl,
+                                  filePath: selectedReceipt.filePath,
+                                  fileName: selectedReceipt.fileName
+                                });
+                                return null;
+                              })()}
+                            </>
+                          ) : selectedReceipt.fileUrl.match(/\.pdf$/i) ? (
+                            <iframe
+                              src={selectedReceipt.fileUrl + '#toolbar=0'}
+                              className="w-full h-[calc(80vh-6rem)]"
+                              title={selectedReceipt.fileName}
+                            />
+                          ) : (
+                            <div className="text-center p-4 text-gray-500">
+                              <FileText className="h-16 w-16 mx-auto mb-2 text-gray-400" />
+                              <p>このファイル形式はプレビューできません</p>
+                              <a 
+                                href={selectedReceipt.fileUrl} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="mt-2 inline-block text-blue-600 hover:underline"
+                              >
+                                ファイルをダウンロード
+                              </a>
+                            </div>
+                          )
                         ) : (
-                          <iframe
-                            src={selectedReceipt.fileUrl}
-                            className="w-full h-full"
-                            title={selectedReceipt.fileName}
-                          />
+                          <div className="text-center p-4 text-gray-500">
+                            <FileText className="h-16 w-16 mx-auto mb-2 text-gray-400" />
+                            <p>ファイル情報を取得できません</p>
+                          </div>
                         )}
                       </div>
                     </motion.div>

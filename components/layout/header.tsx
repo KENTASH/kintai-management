@@ -132,7 +132,14 @@ export function Header({ toggleSideNav }: HeaderProps) {
         <div className="flex h-16 items-center px-4">
           <div className="flex flex-1 items-center justify-between">
             <div className="flex items-center space-x-2">
-              <Building2 className="h-6 w-6 text-white" />
+              <Image
+                alt="Attendance System Logo"
+                width="32"
+                height="32"
+                className="h-8 w-8"
+                src="/logo.png"
+                style={{ color: 'transparent' }}
+              />
               <span className="text-lg font-semibold">{getSystemName()}</span>
             </div>
 
