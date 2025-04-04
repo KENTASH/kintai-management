@@ -217,6 +217,17 @@ export default function AttendanceDetailPage() {
   const [showRejectionDialog, setShowRejectionDialog] = useState(false)
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' | 'info'; position?: 'top' | 'center'; dismissible?: boolean } | null>(null)
   const [holidays, setHolidays] = useState<{ date: string; remarks: string }[]>([])
+  const [selectedReceipt, setSelectedReceipt] = useState<{ 
+    id: string; 
+    fileName: string; 
+    fileUrl?: string; 
+    filePath?: string;
+    fileSize?: number;
+    fileType?: string;
+    remarks?: string;
+    uploadedAt?: string;
+  } | null>(null)
+  const [showReceiptViewer, setShowReceiptViewer] = useState(false)
 
   // サマリ情報の計算
   const summary = useMemo(() => {
@@ -341,22 +352,30 @@ export default function AttendanceDetailPage() {
     return holidays.some(holiday => holiday.date === dateStr)
   }
 
-  // 経費の合計を計算
+  // 経費の合計金額を計算
   const expenseSummary = useMemo(() => {
-    if (!attendanceData?.expenses) return {
-      commuteTotal: 0,
-      businessTotal: 0
+    if (!attendanceData?.expenses) {
+      return {
+        commuteTotal: 0,
+        businessTotal: 0,
+        total: 0
+      }
     }
 
-    const commuteTotal = attendanceData.expenses.commuteExpenses
-      .reduce((sum, expense) => sum + expense.amount, 0)
+    const commuteTotal = attendanceData.expenses.commuteExpenses.reduce(
+      (sum, expense) => sum + expense.amount,
+      0
+    )
 
-    const businessTotal = attendanceData.expenses.businessExpenses
-      .reduce((sum, expense) => sum + expense.amount, 0)
+    const businessTotal = attendanceData.expenses.businessExpenses.reduce(
+      (sum, expense) => sum + expense.amount,
+      0
+    )
 
     return {
       commuteTotal,
-      businessTotal
+      businessTotal,
+      total: commuteTotal + businessTotal
     }
   }, [attendanceData?.expenses])
 
@@ -501,28 +520,78 @@ export default function AttendanceDetailPage() {
           .eq('user_id', headerData.user_id)
           .eq('year', headerData.year)
           .eq('month', headerData.month)
-          .single()
+          .maybeSingle()
 
         if (expenseHeaderError) throw expenseHeaderError
 
         // 経費明細の取得
-        const { data: expenseData, error: expenseError } = await supabase
-          .from('expense_details')
-          .select(`
-            id,
-            date,
-            transportation,
-            from_location,
-            to_location,
-            expense_type,
-            round_trip_type,
-            amount,
-            remarks,
-            category
-          `)
-          .eq('header_id', expenseHeaderData.id)
+        let expenseData = [];
+        let receiptsData = [];
+        let receipts = [];
 
-        if (expenseError) throw expenseError
+        if (expenseHeaderData) {
+          // 経費明細の取得
+          const { data, error: expenseError } = await supabase
+            .from('expense_details')
+            .select(`
+              id,
+              date,
+              transportation,
+              from_location,
+              to_location,
+              expense_type,
+              round_trip_type,
+              amount,
+              remarks,
+              category
+            `)
+            .eq('header_id', expenseHeaderData.id)
+
+          if (expenseError) throw expenseError
+          expenseData = data || [];
+
+          // 領収書データの取得
+          const { data: receiptData, error: receiptsError } = await supabase
+            .from('expense_receipts')
+            .select(`
+              id,
+              file_name,
+              file_path,
+              file_size,
+              file_type,
+              remarks,
+              uploaded_at
+            `)
+            .eq('header_id', expenseHeaderData.id)
+
+          if (receiptsError) throw receiptsError
+          receiptsData = receiptData || [];
+
+          // 領収書の公開URLを取得
+          receipts = receiptsData.map(item => {
+            let fileUrl = '';
+            if (item.file_path) {
+              try {
+                const { data } = supabase.storage
+                  .from('expense-evidences')
+                  .getPublicUrl(item.file_path);
+                fileUrl = data.publicUrl;
+              } catch (error) {
+                console.error('領収書の公開URL取得エラー:', error);
+              }
+            }
+            return {
+              id: item.id,
+              fileName: item.file_name,
+              fileUrl: fileUrl,
+              filePath: item.file_path,
+              fileSize: item.file_size,
+              fileType: item.file_type,
+              remarks: item.remarks || '',
+              uploadedAt: item.uploaded_at
+            };
+          });
+        }
 
         // データの整形
         const formattedData: AttendanceDetail = {
@@ -579,13 +648,7 @@ export default function AttendanceDetailPage() {
                 amount: expense.amount,
                 remarks: expense.remarks || ''
               })) || [],
-            receipts: expenseData
-              ?.filter(expense => expense.category === 'receipt')
-              ?.map(expense => ({
-                id: expense.id,
-                fileName: expense.remarks || '',
-                remarks: expense.remarks || ''
-              })) || []
+            receipts: receipts
           }
         }
 
@@ -1090,37 +1153,44 @@ export default function AttendanceDetailPage() {
                     <h2 className="text-lg font-semibold text-purple-800">領収書・定期券</h2>
                   </div>
                   <div className="border rounded-lg border-gray-200 overflow-hidden max-w-2xl">
-                    <div className="grid grid-cols-3 gap-0 p-2 bg-gray-50 text-sm border-b border-gray-200">
-                      <div className="col-span-2 text-gray-700 font-medium px-2">ファイル名</div>
-                      <div className="col-span-1 text-gray-700 font-medium px-2">備考</div>
+                    <div className="grid grid-cols-12 gap-0 p-2 bg-gray-50 text-sm border-b border-gray-200">
+                      <div className="col-span-8 text-gray-700 font-medium px-2">ファイル名</div>
+                      <div className="col-span-4 text-gray-700 font-medium px-2">備考</div>
                     </div>
                     <div className="divide-y divide-gray-100">
-                      {attendanceData?.expenses?.receipts?.map((receipt) => (
-                        <div 
-                          key={receipt.id} 
-                          className="grid grid-cols-3 gap-0 p-1.5 hover:bg-gray-50/50 items-center"
-                        >
-                          <div className="col-span-2 px-2">
-                            <button
-                              onClick={() => {
-                                // ファイルビューワーの実装は後ほど
-                              }}
-                              className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
-                            >
-                              {receipt.fileName}
-                            </button>
+                      {attendanceData?.expenses?.receipts?.length > 0 ? (
+                        attendanceData.expenses.receipts.map((receipt) => (
+                          <div 
+                            key={receipt.id} 
+                            className="grid grid-cols-12 gap-0 p-1.5 hover:bg-gray-50/50 items-center"
+                          >
+                            <div className="col-span-8 px-2 text-left">
+                              <button
+                                onClick={() => {
+                                  setSelectedReceipt(receipt);
+                                  setShowReceiptViewer(true);
+                                }}
+                                className="text-sm text-blue-600 hover:text-blue-800 hover:underline text-left"
+                              >
+                                {receipt.fileName}
+                              </button>
+                            </div>
+                            <div className="col-span-4 px-2">
+                              <span className="text-sm text-gray-700">{receipt.remarks || '―'}</span>
+                            </div>
                           </div>
-                          <div className="col-span-1 px-2 text-sm">
-                            {receipt.remarks}
-                          </div>
+                        ))
+                      ) : (
+                        <div className="py-4 text-center text-gray-500">
+                          登録されている領収書がありません
                         </div>
-                      ))}
+                      )}
                     </div>
                   </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
         <TabsContent value="business">
           <Card>
@@ -1163,6 +1233,99 @@ export default function AttendanceDetailPage() {
             >
               差戻し
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 領収書ビューダイアログ */}
+      <Dialog open={showReceiptViewer} onOpenChange={setShowReceiptViewer}>
+        <DialogContent className="sm:max-w-[800px] max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>領収書</DialogTitle>
+            <DialogDescription className="truncate">
+              {selectedReceipt?.fileName}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 flex-1 overflow-auto bg-gray-100 rounded-md flex items-center justify-center">
+            {selectedReceipt && (
+              selectedReceipt.fileUrl ? (
+                selectedReceipt.fileUrl.match(/\.(jpg|jpeg|png|gif)$/i) ? (
+                  // 画像ファイルの場合
+                  <img
+                    src={selectedReceipt.fileUrl}
+                    alt={selectedReceipt.fileName}
+                    className="max-w-full max-h-[60vh] object-contain"
+                    onError={(e) => {
+                      console.error('画像ロード失敗:', selectedReceipt.fileUrl);
+                      const target = e.target as HTMLImageElement;
+                      target.onerror = null;
+                      target.style.display = 'none';
+                      target.insertAdjacentHTML('afterend', `
+                        <div class="text-center p-4 text-gray-500">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto mb-2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                          <p>画像の読み込みに失敗しました</p>
+                        </div>
+                      `);
+                    }}
+                  />
+                ) : selectedReceipt.fileUrl.match(/\.pdf$/i) ? (
+                  // PDFファイルの場合
+                  <iframe
+                    src={selectedReceipt.fileUrl + '#toolbar=0'}
+                    className="w-full h-[60vh]"
+                    title={selectedReceipt.fileName}
+                  />
+                ) : (
+                  // 対応していないファイル形式の場合
+                  <div className="text-center p-4 text-gray-500">
+                    <FileText className="h-16 w-16 mx-auto mb-2 text-gray-400" />
+                    <p>このファイル形式はプレビューできません</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-4"
+                      onClick={() => {
+                        if (selectedReceipt.fileUrl) {
+                          window.open(selectedReceipt.fileUrl, '_blank');
+                        }
+                      }}
+                    >
+                      ファイルを開く
+                    </Button>
+                  </div>
+                )
+              ) : (
+                // ファイルURLがない場合
+                <div className="text-center p-4 text-gray-500">
+                  <AlertTriangle className="h-16 w-16 mx-auto mb-2 text-amber-400" />
+                  <p>ファイルを表示できません</p>
+                </div>
+              )
+            )}
+          </div>
+          <div className="mt-2 text-sm text-gray-500">
+            <p><span className="font-medium">備考: </span>{selectedReceipt?.remarks || 'なし'}</p>
+          </div>
+          <DialogFooter className="mt-4">
+            <Button
+              variant="outline"
+              onClick={() => setShowReceiptViewer(false)}
+            >
+              閉じる
+            </Button>
+            {selectedReceipt?.fileUrl && (
+              <Button
+                onClick={() => {
+                  if (selectedReceipt.fileUrl) {
+                    window.open(selectedReceipt.fileUrl, '_blank');
+                  }
+                }}
+              >
+                ブラウザで開く
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
