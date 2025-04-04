@@ -525,9 +525,37 @@ export default function AttendanceDetailPage() {
         if (expenseHeaderError) throw expenseHeaderError
 
         // 経費明細の取得
-        let expenseData = [];
-        let receiptsData = [];
-        let receipts = [];
+        let expenseData: Array<{
+          id: string;
+          date: string;
+          transportation: string;
+          from_location: string;
+          to_location: string;
+          expense_type: string;
+          round_trip_type: string;
+          amount: number;
+          remarks: string | null;
+          category: string;
+        }> = [];
+        let receiptsData: Array<{
+          id: string;
+          file_name: string;
+          file_path: string | null;
+          file_size: number | null;
+          file_type: string | null;
+          remarks: string | null;
+          uploaded_at: string;
+        }> = [];
+        let receipts: Array<{
+          id: string;
+          fileName: string;
+          fileUrl: string;
+          filePath: string | null;
+          fileSize: number | null;
+          fileType: string | null;
+          remarks: string;
+          uploadedAt: string;
+        }> = [];
 
         if (expenseHeaderData) {
           // 経費明細の取得
@@ -1158,7 +1186,7 @@ export default function AttendanceDetailPage() {
                       <div className="col-span-4 text-gray-700 font-medium px-2">備考</div>
                     </div>
                     <div className="divide-y divide-gray-100">
-                      {attendanceData?.expenses?.receipts?.length > 0 ? (
+                      {attendanceData?.expenses?.receipts && attendanceData.expenses.receipts.length > 0 ? (
                         attendanceData.expenses.receipts.map((receipt) => (
                           <div 
                             key={receipt.id} 
