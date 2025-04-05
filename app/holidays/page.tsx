@@ -208,23 +208,23 @@ export default function HolidaysPage() {
         <link rel="icon" href="/favicon.ico" />
       </Head>
       <div className="space-y-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            <CalendarCheck2 className="h-8 w-8 text-blue-600" />
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+          <CalendarCheck2 className="h-8 w-8 text-blue-600" />
             休日マスタ設定
-          </h1>
-          <p className="text-muted-foreground">
+        </h1>
+        <p className="text-muted-foreground">
             会社指定の休日を設定します。
-          </p>
-        </div>
+        </p>
+      </div>
 
-        <Card>
-          <CardContent className="pt-6">
+      <Card>
+        <CardContent className="pt-6">
             {/* 左右2カラムレイアウト（左側を狭く、右側を広く） */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {/* 左側：カレンダーと登録フォーム（1/3幅） */}
               <div className="space-y-6 max-w-[320px]">
-                <div>
+              <div>
                   <Label>日付</Label>
                   <div className="w-full mt-1 flex justify-center">
                     <Calendar
@@ -269,7 +269,7 @@ export default function HolidaysPage() {
                       onChange={(e) => setSelectedYear(parseInt(e.target.value))}
                       className="w-24"
                     />
-                  </div>
+            </div>
                   <div className="flex items-center gap-2">
                     <Label htmlFor="month">月</Label>
                     <select
@@ -299,7 +299,7 @@ export default function HolidaysPage() {
                       <div key={holiday.id} className="grid grid-cols-4 gap-0 p-1.5 hover:bg-gray-50 text-sm">
                         <div className="col-span-1 px-2 flex items-center">
                           {format(new Date(holiday.date), 'yyyy/MM/dd(E)', { locale: ja })}
-                        </div>
+              </div>
                         <div className="col-span-2 px-2 flex items-center">{holiday.remarks}</div>
                         <div className="col-span-1 px-2">
                           <Button
@@ -316,10 +316,10 @@ export default function HolidaysPage() {
                     ))}
                   </div>
                 </div>
-              </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </CardContent>
+      </Card>
       </div>
     </>
   )
