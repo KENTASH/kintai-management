@@ -1,0 +1,22 @@
+create table public.attendance_details (
+  id uuid not null default extensions.uuid_generate_v4 (),
+  header_id uuid not null,
+  date date not null,
+  start_time time without time zone null,
+  end_time time without time zone null,
+  break_time integer null,
+  actual_working_hours numeric(5, 2) null,
+  work_type_code character varying(2) null,
+  late_early_hours numeric(3, 1) null,
+  remarks text null,
+  created_by uuid not null,
+  created_at timestamp with time zone null default now(),
+  updated_by uuid not null,
+  updated_at timestamp with time zone null default now(),
+  constraint attendance_details_pkey primary key (id),
+  constraint attendance_details_header_id_date_key unique (header_id, date),
+  constraint attendance_details_created_by_fkey foreign KEY (created_by) references users (id),
+  constraint attendance_details_header_id_fkey foreign KEY (header_id) references attendance_headers (id) on delete CASCADE,
+  constraint attendance_details_updated_by_fkey foreign KEY (updated_by) references users (id),
+  constraint attendance_details_work_type_code_fkey foreign KEY (work_type_code) references work_types (code)
+) TABLESPACE pg_default;
