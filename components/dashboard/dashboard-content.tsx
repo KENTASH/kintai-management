@@ -764,6 +764,27 @@ export function DashboardContent() {
                     <div className="absolute left-10 top-0 bottom-10 w-px bg-gray-300"></div>
                     <div className="absolute left-10 right-0 bottom-10 h-px bg-gray-300"></div>
                     
+                    {/* Y軸の目盛り線 */}
+                    {Array.from({ length: 10 }, (_, i) => (
+                      <div
+                        key={i}
+                        className="absolute left-10 right-0 h-px bg-gray-200"
+                        style={{
+                          bottom: `calc(${((i + 1) / 10) * 100}% + 10px)`,
+                          opacity: 0.5
+                        }}
+                      ></div>
+                    ))}
+                    
+                    {/* 8時間の基準線 */}
+                    <div 
+                      className="absolute left-10 right-0 h-px bg-red-400"
+                      style={{ 
+                        bottom: `calc(${(8 / 10) * 100}% + 3px)`,
+                        opacity: 0.5
+                      }}
+                    ></div>
+                    
                     {/* Y軸ラベル - 1時間刻み */}
                     <div className="absolute left-0 top-0 bottom-10 flex flex-col justify-between text-xs text-gray-500">
                       <div>10時間</div>
@@ -776,11 +797,10 @@ export function DashboardContent() {
                       <div>3時間</div>
                       <div>2時間</div>
                       <div>1時間</div>
-                      <div>0時間</div>
                     </div>
                     
                     {/* グラフ本体 */}
-                    <div className="absolute left-12 right-2 top-4 bottom-12 flex items-end justify-between">
+                    <div className="absolute left-12 right-2 top-4 bottom-10 flex items-end justify-between">
                       {monthlyChartData.map((day, index) => (
                         <div 
                           key={index} 
@@ -789,12 +809,31 @@ export function DashboardContent() {
                         >
                           {/* 勤務時間バー */}
                           <div 
-                            className={`w-[80%] bg-blue-500 rounded-t`}
+                            className="w-[80%] flex flex-col justify-end"
                             style={{ 
                               height: `${Math.max((day.actualHours / 10) * 100, day.actualHours > 0 ? 1 : 0)}%`,
                             }}
                             title={`${day.day}日: ${day.actualHours}時間`}
-                          ></div>
+                          >
+                            {/* 8時間を超える部分（赤色） */}
+                            {day.actualHours > 8 && (
+                              <div
+                                className="w-full bg-red-500 rounded-t"
+                                style={{
+                                  height: `${((day.actualHours - 8) / 10) * 100}%`,
+                                  minHeight: '2px'
+                                }}
+                              ></div>
+                            )}
+                            {/* 8時間までの部分（青色） */}
+                            <div
+                              className="w-full bg-blue-500"
+                              style={{
+                                height: `${(Math.min(day.actualHours, 8) / 10) * 100}%`,
+                                borderRadius: day.actualHours <= 8 ? '4px 4px 0 0' : '0'
+                              }}
+                            ></div>
+                          </div>
                           
                           {/* X軸ラベル（すべての日を表示） */}
                           <div className="mt-1 text-[9px] text-gray-500 absolute bottom-[-38px] flex flex-col items-center">
