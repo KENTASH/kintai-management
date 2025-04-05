@@ -93,7 +93,7 @@ const notifications: Notification[] = [
 export function DashboardContent() {
   const { t } = useI18n()
   const { session } = useAuth()
-  const userId = session?.user?.id
+  const [userId, setUserId] = useState<string | null>(null)
   
   const [currentTime, setCurrentTime] = useState(new Date())
   const [todayRecord, setTodayRecord] = useState<AttendanceRecord | null>(null)
@@ -102,6 +102,25 @@ export function DashboardContent() {
   const [selectedMonth, setSelectedMonth] = useState(new Date())
   const [monthlyData, setMonthlyData] = useState<AttendanceRecord[]>([])
   const [isLoadingMonthly, setIsLoadingMonthly] = useState(false)
+
+  // セッションストレージからユーザー情報を取得
+  useEffect(() => {
+    const getUserFromSession = () => {
+      if (typeof window !== 'undefined') {
+        try {
+          const userProfileStr = sessionStorage.getItem('userProfile')
+          if (userProfileStr) {
+            const userProfile = JSON.parse(userProfileStr)
+            setUserId(userProfile.id)
+          }
+        } catch (e) {
+          console.error('ユーザー情報の取得中にエラーが発生:', e)
+        }
+      }
+    }
+
+    getUserFromSession()
+  }, [])
 
   // 時計を更新
   useEffect(() => {
@@ -119,20 +138,39 @@ export function DashboardContent() {
       
       try {
         const today = format(new Date(), 'yyyy-MM-dd')
-        
-        const { data, error } = await supabase
-          .from('attendance_details')
-          .select('*')
+        const currentYear = new Date().getFullYear()
+        const currentMonth = new Date().getMonth() + 1
+
+        // まずheaderを取得
+        const { data: headerData, error: headerError } = await supabase
+          .from('attendance_headers')
+          .select('id')
           .eq('user_id', userId)
-          .eq('date', today)
+          .eq('year', currentYear)
+          .eq('month', currentMonth)
           .single()
-          
-        if (error && error.code !== 'PGRST116') {
-          console.error('今日の勤怠データ取得エラー:', error)
-          return
+
+        if (headerError && headerError.code !== 'PGRST116') {
+          throw headerError
         }
-        
-        setTodayRecord(data || null)
+
+        // headerが存在する場合のみ、詳細データを取得
+        if (headerData?.id) {
+          const { data, error } = await supabase
+            .from('attendance_details')
+            .select('*')
+            .eq('header_id', headerData.id)
+            .eq('date', today)
+            .single()
+
+          if (error && error.code !== 'PGRST116') {
+            throw error
+          }
+
+          setTodayRecord(data || null)
+        } else {
+          setTodayRecord(null)
+        }
       } catch (error) {
         console.error('勤怠データ取得中にエラーが発生しました:', error)
       }
@@ -144,25 +182,11 @@ export function DashboardContent() {
   // 月間データの取得
   const fetchMonthlyData = async (targetMonth = selectedMonth) => {
     if (!userId) return
-    
+
     try {
       setIsLoadingMonthly(true)
       const year = targetMonth.getFullYear()
       const month = targetMonth.getMonth() + 1
-      
-      console.log(`${year}年${month}月のデータを取得します - ユーザーID: ${userId}`)
-      
-      // Supabaseに接続テストを実行
-      const { data: connTest, error: connError } = await supabase
-        .from('users')
-        .select('id')
-        .limit(1)
-      
-      if (connError) {
-        console.error('Supabase接続テスト失敗:', connError)
-      } else {
-        console.log('Supabase接続テスト成功')
-      }
       
       // まずattendance_headersからヘッダーIDを取得
       const { data: headerData, error: headerError } = await supabase
@@ -173,123 +197,39 @@ export function DashboardContent() {
         .eq('month', month)
         .single()
       
-      if (headerError && headerError.code !== 'PGRST116') {
-        console.error('月間勤怠ヘッダ取得エラー:', headerError)
-        console.log('attendance_headersからのデータ取得に失敗したため、attendance_detailsから直接取得を試みます')
-        await fetchMonthlyDataByDateRange(year, month)
+      if (headerError) {
+        generateDummyData(year, month)
         return
       }
       
       if (!headerData?.id) {
-        console.log(`${year}年${month}月のヘッダーレコードが見つかりません`)
-        console.log('attendance_detailsから直接取得を試みます')
-        await fetchMonthlyDataByDateRange(year, month)
+        generateDummyData(year, month)
         return
       }
       
-      const headerId = headerData.id
-      console.log(`ヘッダーID取得成功: ${headerId}`)
-      
-      // 次にattendance_detailsから日ごとのデータを取得
+      // 次にattendance_detailsから日次データを取得
       const { data: detailsData, error: detailsError } = await supabase
         .from('attendance_details')
         .select('id, date, start_time, end_time, break_time, actual_working_hours, work_type_code, remarks')
-        .eq('header_id', headerId)
+        .eq('header_id', headerData.id)
         .order('date', { ascending: true })
       
       if (detailsError) {
-        console.error('月間勤怠詳細取得エラー:', detailsError)
-        console.log('header_idによる取得に失敗したため、日付範囲による取得を試みます')
-        await fetchMonthlyDataByDateRange(year, month)
+        generateDummyData(year, month)
         return
       }
       
-      console.log('取得したデータ数:', detailsData?.length || 0)
-      
-      // データがなければ日付範囲による取得を試みる
       if (!detailsData || detailsData.length === 0) {
-        console.log('header_idで取得したデータが0件のため、日付範囲による取得を試みます')
-        await fetchMonthlyDataByDateRange(year, month)
+        generateDummyData(year, month)
         return
       }
       
       processMonthlyData(detailsData, year, month)
     } catch (error) {
-      console.error('月間データ取得中にエラーが発生しました:', error)
-      // エラーの場合は日付範囲による取得を試みる
-      const year = targetMonth.getFullYear()
-      const month = targetMonth.getMonth() + 1
-      await fetchMonthlyDataByDateRange(year, month)
+      console.error('データ取得中にエラーが発生:', error)
+      generateDummyData(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1)
     } finally {
       setIsLoadingMonthly(false)
-    }
-  }
-  
-  // 日付範囲でattendance_detailsから直接データを取得
-  const fetchMonthlyDataByDateRange = async (year: number, month: number) => {
-    if (!userId) return
-    
-    try {
-      console.log('日付範囲でattendance_detailsから直接データを取得します')
-      
-      // 日付範囲を計算
-      const startDate = `${year}-${month.toString().padStart(2, '0')}-01`
-      const lastDay = new Date(year, month, 0).getDate()
-      const endDate = `${year}-${month.toString().padStart(2, '0')}-${lastDay}`
-      
-      console.log(`検索期間: ${startDate} 〜 ${endDate}`)
-      console.log(`検索条件: ユーザーID=${userId}、開始日=${startDate}、終了日=${endDate}`)
-      
-      // ヘッダーIDをまず取得
-      const { data: headers, error: headerError } = await supabase
-        .from('attendance_headers')
-        .select('id')
-        .eq('user_id', userId)
-        .eq('year', year)
-        .eq('month', month)
-      
-      if (headerError) {
-        console.error('ヘッダー検索エラー:', headerError)
-      } else {
-        console.log(`取得したヘッダー数: ${headers?.length || 0}`)
-        if (headers && headers.length > 0) {
-          console.log('使用可能なヘッダーID:', headers.map(h => h.id))
-          
-          // ヘッダーIDでattendance_detailsを検索
-          const headerIds = headers.map(h => h.id)
-          
-          for (const headerId of headerIds) {
-            console.log(`ヘッダーID ${headerId} でデータ検索中...`)
-            
-            const { data: detailsData, error: detailsError } = await supabase
-              .from('attendance_details')
-              .select('id, date, start_time, end_time, break_time, actual_working_hours, work_type_code, remarks')
-              .eq('header_id', headerId)
-              .order('date', { ascending: true })
-            
-            if (detailsError) {
-              console.error(`ヘッダーID ${headerId} による検索エラー:`, detailsError)
-              continue
-            }
-            
-            if (detailsData && detailsData.length > 0) {
-              console.log(`ヘッダーID ${headerId} で ${detailsData.length} 件のデータを取得しました`)
-              processMonthlyData(detailsData, year, month)
-              return
-            } else {
-              console.log(`ヘッダーID ${headerId} ではデータが見つかりませんでした`)
-            }
-          }
-          
-          console.log('すべてのヘッダーIDで検索しましたが、データが見つかりませんでした')
-        }
-      }
-      
-      // 開発用のダミーデータを生成
-      generateDummyData(year, month)
-    } catch (error) {
-      console.error('日付範囲でのデータ取得中にエラーが発生しました:', error)
-      generateDummyData(year, month)
     }
   }
   
@@ -301,32 +241,23 @@ export function DashboardContent() {
       return
     }
     
-    const sampleRecord = detailsData[0]
-    console.log('処理するデータサンプル:', sampleRecord)
-    console.log('データのプロパティ一覧:', Object.keys(sampleRecord))
-    console.log('actual_working_hoursの型:', typeof sampleRecord.actual_working_hours)
-    console.log('actual_working_hoursの値:', sampleRecord.actual_working_hours)
-    
     // 取得したデータのクリーニングと型変換
-    const cleanedData = detailsData.map((record, index) => {
+    const cleanedData = detailsData.map(record => {
       // PostgreSQLのnumeric型から数値型に変換
       let actualHours = null
       if (record.actual_working_hours !== null && record.actual_working_hours !== undefined) {
         try {
-          // 確実にnumber型に変換
-          let hourValue = 0;
+          let hourValue = 0
           
           if (typeof record.actual_working_hours === 'number') {
-            hourValue = record.actual_working_hours;
+            hourValue = record.actual_working_hours
           } else if (typeof record.actual_working_hours === 'string') {
-            hourValue = parseFloat(record.actual_working_hours);
+            hourValue = parseFloat(record.actual_working_hours)
           } else {
-            // 他の型の場合（オブジェクト等）
-            hourValue = parseFloat(String(record.actual_working_hours));
+            hourValue = parseFloat(String(record.actual_working_hours))
           }
           
-          actualHours = isNaN(hourValue) ? 0 : hourValue;
-          console.log(`レコード[${index}]: 日付=${record.date}, 変換後の勤務時間 = ${actualHours}`);
+          actualHours = isNaN(hourValue) ? 0 : hourValue
         } catch (e) {
           console.error(`勤務時間の変換中にエラー発生: ${record.date}`, e)
           actualHours = 0
@@ -339,10 +270,7 @@ export function DashboardContent() {
       }
     })
     
-    console.log('変換後のデータ例:', cleanedData[0])
-    console.log('最終的なデータ件数:', cleanedData.length)
-    
-    // データを状態に設定
+    console.log('データ変換完了:', cleanedData.length, '件')
     setMonthlyData(cleanedData)
   }
   
@@ -376,9 +304,11 @@ export function DashboardContent() {
     }
   }
   
-  // コンポーネントマウント時に月間データを取得
+  // 月間データの取得（依存配列にuserIdを追加）
   useEffect(() => {
-    fetchMonthlyData()
+    if (userId) {
+      fetchMonthlyData()
+    }
   }, [userId, selectedMonth])
   
   // 出勤処理
@@ -390,15 +320,52 @@ export function DashboardContent() {
       const now = new Date()
       const today = format(now, 'yyyy-MM-dd')
       const timeNow = format(now, 'HH:mm:ss')
+      const currentYear = now.getFullYear()
+      const currentMonth = now.getMonth() + 1
+
+      // まずヘッダーを取得または作成
+      let headerId: string
+      
+      const { data: existingHeader, error: headerError } = await supabase
+        .from('attendance_headers')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('year', currentYear)
+        .eq('month', currentMonth)
+        .single()
+
+      if (headerError && headerError.code !== 'PGRST116') {
+        throw headerError
+      }
+
+      if (existingHeader?.id) {
+        headerId = existingHeader.id
+      } else {
+        // ヘッダーが存在しない場合は新規作成
+        const { data: newHeader, error: createHeaderError } = await supabase
+          .from('attendance_headers')
+          .insert({
+            user_id: userId,
+            year: currentYear,
+            month: currentMonth,
+            status: '00',
+            created_by: userId,
+            updated_by: userId
+          })
+          .select()
+          .single()
+
+        if (createHeaderError) throw createHeaderError
+        if (!newHeader) throw new Error('ヘッダーの作成に失敗しました')
+        
+        headerId = newHeader.id
+      }
       
       // 既存レコードがあるか確認
       if (todayRecord?.id) {
         // 既に出勤済みの場合は処理をスキップ
-        if (todayRecord.start_time) {
-          console.log('既に出勤済みです')
-          return
-        }
-        
+        if (todayRecord.start_time) return
+
         // 既存レコードを更新
         const { error } = await supabase
           .from('attendance_details')
@@ -414,7 +381,7 @@ export function DashboardContent() {
       } else {
         // 新規レコードを作成
         const newRecord = {
-          user_id: userId,
+          header_id: headerId,
           date: today,
           start_time: timeNow,
           end_time: null
@@ -490,17 +457,19 @@ export function DashboardContent() {
     }
   }
   
-  // 前月・翌月の切り替え
+  // 前月・翌月の切り替え処理を修正
   const goToPreviousMonth = () => {
-    setSelectedMonth(prev => addMonths(prev, -1))
-    // 明示的にデータ再取得をトリガー
-    fetchMonthlyData(addMonths(selectedMonth, -1))
+    if (!userId) return
+    const newMonth = addMonths(selectedMonth, -1)
+    setSelectedMonth(newMonth)
+    fetchMonthlyData(newMonth)
   }
   
   const goToNextMonth = () => {
-    setSelectedMonth(prev => addMonths(prev, 1))
-    // 明示的にデータ再取得をトリガー
-    fetchMonthlyData(addMonths(selectedMonth, 1))
+    if (!userId) return
+    const newMonth = addMonths(selectedMonth, 1)
+    setSelectedMonth(newMonth)
+    fetchMonthlyData(newMonth)
   }
   
   // 月間データからグラフ用のデータを生成
@@ -509,8 +478,6 @@ export function DashboardContent() {
     const year = selectedMonth.getFullYear()
     const month = selectedMonth.getMonth() + 1
     const daysInMonth = new Date(year, month, 0).getDate()
-    
-    console.log('月間データの内容:', JSON.stringify(monthlyData).substring(0, 200) + '...')
     
     // 各日付のデータを初期化
     const dailyData = Array.from({ length: daysInMonth }, (_, i) => {
@@ -523,47 +490,23 @@ export function DashboardContent() {
     })
     
     // 勤怠データを日付ごとにマッピング
-    console.log('勤怠データをマッピングします、件数:', monthlyData.length)
-    
-    monthlyData.forEach((record, index) => {
-      if (!record.date) {
-        console.log(`レコード[${index}]: 日付がありません`)
-        return
-      }
+    monthlyData.forEach(record => {
+      if (!record.date) return
       
       try {
         const recordDate = new Date(record.date)
         const day = recordDate.getDate()
         
         if (day >= 1 && day <= daysInMonth) {
-          // actual_working_hoursが数値変換済みであることを想定
-          if (record.actual_working_hours === null || record.actual_working_hours === undefined) {
-            console.log(`レコード[${index}]: 勤務時間が未設定です - ${record.date}`)
-            return
-          }
-          
-          // 既に数値型になっているはずだが、念のためチェック
           const actualHours = Number(record.actual_working_hours)
-          
           if (!isNaN(actualHours)) {
-            console.log(`レコード[${index}]: 日付=${record.date}, 日=${day}, 勤務時間=${actualHours}`)
             dailyData[day - 1].actualHours = actualHours
-          } else {
-            console.error(`レコード[${index}]: 勤務時間が数値変換できません - ${record.date}, ${record.actual_working_hours}`)
           }
         }
       } catch (e) {
-        console.error(`レコード[${index}]: 日付処理中にエラーが発生しました - ${record.date}:`, e)
+        console.error(`日付処理中にエラーが発生しました - ${record.date}:`, e)
       }
     })
-    
-    // データ確認
-    const hasHours = dailyData.some(d => d.actualHours > 0)
-    console.log('勤務時間が設定されているデータがあるか:', hasHours)
-    
-    if (!hasHours) {
-      console.log('グラフデータに勤務時間が一つも設定されていません！')
-    }
     
     return dailyData
   }, [monthlyData, selectedMonth])

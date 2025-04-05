@@ -686,10 +686,13 @@ export default function AttendancePage() {
       // ヘッダーデータの保存
       const headerData = {
         user_id: userInfo.id,
+        employee_id: userInfo.employee_id,
         year: year,
         month: month,
-        branch_code: branchInfo.code,
+        branch: branchInfo.code,
         status: isCheck ? '01' : '00', // チェックボタンの場合は01、それ以外は00
+        created_by: userInfo.id, // 作成者としてユーザーIDを設定
+        updated_by: userInfo.id, // 更新者としてユーザーIDを設定
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
