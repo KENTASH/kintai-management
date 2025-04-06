@@ -762,8 +762,17 @@ export function DashboardContent() {
                   <div className="text-2xl font-bold">{monthlyData.length} 日</div>
                 </div>
                 <div className="p-4 bg-green-50 rounded-lg">
-                  <div className="text-sm text-green-700 mb-1">勤務時間</div>
+                  <div className="text-sm text-green-700 mb-1">総勤務時間</div>
                   <div className="text-2xl font-bold">{totalHours.toFixed(1)} 時間</div>
+                </div>
+                <div className="p-4 bg-red-50 rounded-lg">
+                  <div className="text-sm text-red-700 mb-1">残業時間</div>
+                  <div className="text-2xl font-bold">
+                    {monthlyData.reduce((sum, record) => {
+                      const hours = Number(record.actual_working_hours) || 0
+                      return sum + Math.max(0, hours - 8)
+                    }, 0).toFixed(1)} 時間
+                  </div>
                 </div>
               </div>
               
@@ -776,10 +785,14 @@ export function DashboardContent() {
                 ) : monthlyChartData.length > 0 ? (
                   <div className="relative h-[400px]">
                     {/* 凡例 */}
-                    <div className="absolute right-0 top-0 flex items-center gap-2 text-xs z-10">
+                    <div className="absolute right-0 top-0 flex items-center gap-4 text-xs z-10">
                       <div className="flex items-center gap-1">
                         <div className="w-3 h-3 bg-blue-500"></div>
-                        <span>勤務時間</span>
+                        <span>通常勤務</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-3 h-3 bg-red-500"></div>
+                        <span>残業時間</span>
                       </div>
                     </div>
 
@@ -818,13 +831,30 @@ export function DashboardContent() {
                             {/* 勤務時間バー */}
                             {day.actualHours > 0 && (
                               <div 
-                                className="w-[80%] bg-blue-500 rounded-t"
+                                className="w-[80%] flex flex-col justify-end relative"
                                 style={{ 
                                   height: `${Math.min((day.actualHours / 12) * 100, 100)}%`,
-                                  minHeight: '2px'
                                 }}
                                 title={`${day.day}日: ${day.actualHours}時間`}
-                              />
+                              >
+                                {/* 基本の青色バー（8時間まで） */}
+                                <div
+                                  className="w-full bg-blue-500 absolute bottom-0"
+                                  style={{
+                                    height: `${Math.min((Math.min(day.actualHours, 8) / day.actualHours) * 100, 100)}%`,
+                                    borderRadius: day.actualHours <= 8 ? '4px 4px 0 0' : '0'
+                                  }}
+                                />
+                                {/* 超過分の赤色バー（8時間超過分） */}
+                                {day.actualHours > 8 && (
+                                  <div
+                                    className="w-full bg-red-500 absolute top-0 rounded-t"
+                                    style={{
+                                      height: `${((day.actualHours - 8) / day.actualHours) * 100}%`
+                                    }}
+                                  />
+                                )}
+                              </div>
                             )}
 
                             {/* X軸ラベル */}
