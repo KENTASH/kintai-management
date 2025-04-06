@@ -137,7 +137,9 @@ export function DashboardContent() {
       if (!userId) return
       
       try {
+        // 日付フォーマットを修正
         const today = format(new Date(), 'yyyy-MM-dd')
+        console.log('検索する日付:', today)
         const currentYear = new Date().getFullYear()
         const currentMonth = new Date().getMonth() + 1
 
@@ -150,9 +152,12 @@ export function DashboardContent() {
           .eq('month', currentMonth)
           .single()
 
-        if (headerError && headerError.code !== 'PGRST116') {
-          throw headerError
+        if (headerError) {
+          console.error('ヘッダー取得エラー:', headerError)
+          return
         }
+
+        console.log('取得したヘッダー:', headerData)
 
         // headerが存在する場合のみ、詳細データを取得
         if (headerData?.id) {
@@ -161,12 +166,14 @@ export function DashboardContent() {
             .select('*')
             .eq('header_id', headerData.id)
             .eq('date', today)
-            .single()
+            .maybeSingle()
 
-          if (error && error.code !== 'PGRST116') {
-            throw error
+          if (error) {
+            console.error('詳細データ取得エラー:', error)
+            return
           }
 
+          console.log('取得した詳細データ:', data)
           setTodayRecord(data || null)
         } else {
           setTodayRecord(null)
@@ -318,14 +325,17 @@ export function DashboardContent() {
     try {
       setIsCheckingIn(true)
       const now = new Date()
+      // 日付フォーマットを修正
       const today = format(now, 'yyyy-MM-dd')
       const timeNow = format(now, 'HH:mm:ss')
       const currentYear = now.getFullYear()
       const currentMonth = now.getMonth() + 1
 
+      console.log('出勤処理開始:', { today, timeNow })
+
       // まずヘッダーを取得または作成
       let headerId: string
-      
+
       const { data: existingHeader, error: headerError } = await supabase
         .from('attendance_headers')
         .select('id')
@@ -335,11 +345,13 @@ export function DashboardContent() {
         .single()
 
       if (headerError && headerError.code !== 'PGRST116') {
+        console.error('ヘッダー取得エラー:', headerError)
         throw headerError
       }
 
       if (existingHeader?.id) {
         headerId = existingHeader.id
+        console.log('既存のヘッダーID:', headerId)
       } else {
         // ヘッダーが存在しない場合は新規作成
         const { data: newHeader, error: createHeaderError } = await supabase
@@ -355,14 +367,19 @@ export function DashboardContent() {
           .select()
           .single()
 
-        if (createHeaderError) throw createHeaderError
+        if (createHeaderError) {
+          console.error('ヘッダー作成エラー:', createHeaderError)
+          throw createHeaderError
+        }
         if (!newHeader) throw new Error('ヘッダーの作成に失敗しました')
         
         headerId = newHeader.id
+        console.log('新規作成したヘッダーID:', headerId)
       }
       
       // 既存レコードがあるか確認
       if (todayRecord?.id) {
+        console.log('既存の勤怠レコードを更新:', todayRecord.id)
         // 既に出勤済みの場合は処理をスキップ
         if (todayRecord.start_time) return
 
@@ -372,29 +389,40 @@ export function DashboardContent() {
           .update({ start_time: timeNow })
           .eq('id', todayRecord.id)
           
-        if (error) throw error
+        if (error) {
+          console.error('レコード更新エラー:', error)
+          throw error
+        }
         
         setTodayRecord({
           ...todayRecord,
           start_time: timeNow
         })
       } else {
+        console.log('新規勤怠レコードを作成')
         // 新規レコードを作成
         const newRecord = {
           header_id: headerId,
           date: today,
           start_time: timeNow,
-          end_time: null
+          end_time: null,
+          break_time: 60,
+          actual_working_hours: 0
         }
         
         const { data, error } = await supabase
           .from('attendance_details')
           .insert(newRecord)
           .select()
+          .single()
           
-        if (error) throw error
+        if (error) {
+          console.error('レコード作成エラー:', error)
+          throw error
+        }
         
-        setTodayRecord(data?.[0] || null)
+        console.log('作成された勤怠レコード:', data)
+        setTodayRecord(data || null)
       }
     } catch (error) {
       console.error('出勤処理中にエラーが発生しました:', error)
@@ -740,112 +768,77 @@ export function DashboardContent() {
               </div>
               
               {/* 勤務時間グラフ */}
-              <div className="bg-gray-50 p-4 rounded-lg min-h-[300px]">
+              <div className="bg-gray-50 p-4 rounded-lg">
                 {isLoadingMonthly ? (
-                  <div className="flex items-center justify-center h-[300px]">
+                  <div className="flex items-center justify-center h-[400px]">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-700"></div>
                   </div>
                 ) : monthlyChartData.length > 0 ? (
-                  <div className="relative h-[300px]">
-                    {/* デバッグ情報（非表示） */}
-                    <div className="hidden">
-                      {monthlyChartData.length > 0 ? 'データあり' : 'データなし'}
-                    </div>
-                    
-                    {/* 凡例 - 右上に配置 */}
+                  <div className="relative h-[400px]">
+                    {/* 凡例 */}
                     <div className="absolute right-0 top-0 flex items-center gap-2 text-xs z-10">
                       <div className="flex items-center gap-1">
                         <div className="w-3 h-3 bg-blue-500"></div>
                         <span>勤務時間</span>
                       </div>
                     </div>
-                  
-                    {/* X軸とY軸 */}
-                    <div className="absolute left-10 top-0 bottom-10 w-px bg-gray-300"></div>
-                    <div className="absolute left-10 right-0 bottom-10 h-px bg-gray-300"></div>
-                    
-                    {/* Y軸の目盛り線 */}
-                    {Array.from({ length: 10 }, (_, i) => (
-                      <div
-                        key={i}
-                        className="absolute left-10 right-0 h-px bg-gray-200"
-                        style={{
-                          bottom: `calc(${((i + 1) / 10) * 100}% + 10px)`,
-                          opacity: 0.5
-                        }}
-                      ></div>
-                    ))}
-                    
-                    {/* 8時間の基準線 */}
-                    <div 
-                      className="absolute left-10 right-0 h-px bg-red-400"
-                      style={{ 
-                        bottom: `calc(${(8 / 10) * 100}% + 3px)`,
-                        opacity: 0.5
-                      }}
-                    ></div>
-                    
-                    {/* Y軸ラベル - 1時間刻み */}
-                    <div className="absolute left-0 top-0 bottom-10 flex flex-col justify-between text-xs text-gray-500">
+
+                    {/* Y軸ラベル */}
+                    <div className="absolute left-0 top-8 bottom-24 flex flex-col justify-between text-xs text-gray-500">
+                      <div>12時間</div>
                       <div>10時間</div>
-                      <div>9時間</div>
                       <div>8時間</div>
-                      <div>7時間</div>
                       <div>6時間</div>
-                      <div>5時間</div>
                       <div>4時間</div>
-                      <div>3時間</div>
                       <div>2時間</div>
-                      <div>1時間</div>
+                      <div>0時間</div>
                     </div>
-                    
-                    {/* グラフ本体 */}
-                    <div className="absolute left-12 right-2 top-4 bottom-10 flex items-end justify-between">
-                      {monthlyChartData.map((day, index) => (
-                        <div 
-                          key={index} 
-                          className="flex-1 flex flex-col items-center justify-end h-full"
-                          style={{ minWidth: '4px', maxWidth: '12px' }}
-                        >
-                          {/* 勤務時間バー */}
+
+                    {/* グラフエリア */}
+                    <div className="absolute left-12 right-4 top-8 bottom-24 border-l border-b border-gray-300">
+                      {/* Y軸の目盛り線 */}
+                      {Array.from({ length: 6 }, (_, i) => (
+                        <div
+                          key={i}
+                          className="absolute left-0 right-0 h-px bg-gray-200"
+                          style={{
+                            bottom: `${((i + 1) * 2 / 12) * 100}%`,
+                          }}
+                        />
+                      ))}
+
+                      {/* グラフ本体 */}
+                      <div className="absolute inset-0 flex items-end justify-between px-2">
+                        {monthlyChartData.map((day, index) => (
                           <div 
-                            className="w-[80%] flex flex-col justify-end"
-                            style={{ 
-                              height: `${Math.max((day.actualHours / 10) * 100, day.actualHours > 0 ? 1 : 0)}%`,
-                            }}
-                            title={`${day.day}日: ${day.actualHours}時間`}
+                            key={index} 
+                            className="relative flex-1 flex flex-col items-center justify-end h-full"
+                            style={{ minWidth: '4px', maxWidth: '20px' }}
                           >
-                            {/* 8時間を超える部分（赤色） */}
-                            {day.actualHours > 8 && (
-                              <div
-                                className="w-full bg-red-500 rounded-t"
-                                style={{
-                                  height: `${((day.actualHours - 8) / 10) * 100}%`,
+                            {/* 勤務時間バー */}
+                            {day.actualHours > 0 && (
+                              <div 
+                                className="w-[80%] bg-blue-500 rounded-t"
+                                style={{ 
+                                  height: `${Math.min((day.actualHours / 12) * 100, 100)}%`,
                                   minHeight: '2px'
                                 }}
-                              ></div>
+                                title={`${day.day}日: ${day.actualHours}時間`}
+                              />
                             )}
-                            {/* 8時間までの部分（青色） */}
-                            <div
-                              className="w-full bg-blue-500"
-                              style={{
-                                height: `${(Math.min(day.actualHours, 8) / 10) * 100}%`,
-                                borderRadius: day.actualHours <= 8 ? '4px 4px 0 0' : '0'
-                              }}
-                            ></div>
+
+                            {/* X軸ラベル */}
+                            <div className="absolute text-[9px] text-gray-500 top-full mt-2 flex flex-col items-center">
+                              <span>{day.day}</span>
+                              <span>{format(new Date(day.date), 'E', { locale: ja })}</span>
+                            </div>
                           </div>
-                          
-                          {/* X軸ラベル（すべての日を表示） */}
-                          <div className="mt-1 text-[9px] text-gray-500 absolute bottom-[-38px] flex flex-col items-center">
-                            <span>{day.day}</span>
-                            <span>{format(new Date(day.date), 'E', { locale: ja })}</span>
-                          </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
                   </div>
                 ) : (
-                  <div className="flex items-center justify-center h-[300px] text-gray-500">
+                  <div className="flex items-center justify-center h-[400px] text-gray-500">
                     勤務記録がありません
                   </div>
                 )}
