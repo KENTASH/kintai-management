@@ -20,6 +20,7 @@ create table public.users (
   constraint users_pkey primary key (id),
   constraint users_auth_id_key unique (auth_id),
   constraint users_email_key unique (email),
+  constraint users_employee_id_key unique (employee_id),
   constraint users_branch_fkey foreign KEY (branch) references branch_master (code) on delete set null,
   constraint users_language_check check (
     (

@@ -20,8 +20,7 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
-  Maximize2,
-  ExternalLink
+  Maximize2
 } from "lucide-react"
 import { useI18n } from "@/lib/i18n/context"
 import { format, parseISO, differenceInMinutes, addMonths, isToday } from "date-fns"
@@ -33,7 +32,6 @@ import { useAuth } from "@/providers/AuthProvider"
 import { CheckInModal } from './check-in-modal'
 import { CheckOutModal } from './check-out-modal'
 import { MonthlyReportModal } from './monthly-report-modal'
-import { AttendanceHistoryModal } from './attendance-history-modal'
 import { useToast } from "@/components/ui/use-toast"
 
 // お知らせのデータ型定義
@@ -113,7 +111,6 @@ export function DashboardContent() {
   const [isCheckInModalOpen, setIsCheckInModalOpen] = useState(false)
   const [isCheckOutModalOpen, setIsCheckOutModalOpen] = useState(false)
   const [isMonthlyReportModalOpen, setIsMonthlyReportModalOpen] = useState(false)
-  const [isAttendanceHistoryModalOpen, setIsAttendanceHistoryModalOpen] = useState(false)
   const [todayAttendance, setTodayAttendance] = useState<any>(null)
 
   // セッションストレージからユーザー情報を取得
@@ -701,16 +698,7 @@ export function DashboardContent() {
               <CardHeader className="pb-2">
                 <div className="flex items-center gap-2">
                   <Clock className="h-5 w-5 text-blue-600" />
-                  <CardTitle className="text-xl">今日の勤怠</CardTitle>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setIsAttendanceHistoryModalOpen(true)}
-                    className="h-7 w-7 ml-1 hover:bg-blue-50"
-                    title="出退勤履歴を表示"
-                  >
-                    <ExternalLink className="h-4 w-4 text-blue-600" />
-                  </Button>
+                  <CardTitle>今日の勤怠</CardTitle>
                 </div>
               </CardHeader>
               <CardContent>
@@ -718,7 +706,7 @@ export function DashboardContent() {
                   {/* 現在時刻表示、出勤時間、退勤時間を縦に並べる */}
                   <div className="grid grid-cols-3 gap-3 mb-3">
                     {/* 現在時刻表示 */}
-                    <div className="bg-gray-50 rounded-lg p-3 flex flex-col h-24 justify-between">
+                    <div className="bg-white rounded-lg p-3 flex flex-col h-24 justify-between">
                       <div className="text-sm text-muted-foreground font-medium text-center">現在時刻 (JST)</div>
                       <div className="flex flex-col items-center">
                         <div className="text-2xl font-bold text-blue-700">
@@ -740,7 +728,6 @@ export function DashboardContent() {
                         <Button 
                           onClick={() => setIsCheckInModalOpen(true)}
                           className="bg-blue-600 hover:bg-blue-700 text-white h-8 w-24 text-sm"
-                          disabled={!!todayAttendance?.check_in}
                         >
                           <LogIn className="h-4 w-4 mr-1" />
                           出勤
@@ -784,8 +771,7 @@ export function DashboardContent() {
                       </div>
                       <div className="flex flex-col justify-end">
                         <Button 
-                          className="bg-green-600 hover:bg-green-700 text-white h-10 w-auto px-3 text-sm ml-auto"
-                          style={{ width: '50%' }}
+                          className="bg-green-600 hover:bg-green-700 text-white h-10 w-auto px-3 text-sm"
                         >
                           <Calendar className="h-4 w-4 mr-1" />
                           休暇申請
@@ -978,11 +964,6 @@ export function DashboardContent() {
         overtimeHours={overtimeHours}
         onPreviousMonth={goToPreviousMonth}
         onNextMonth={goToNextMonth}
-      />
-      
-      <AttendanceHistoryModal
-        isOpen={isAttendanceHistoryModalOpen}
-        onClose={() => setIsAttendanceHistoryModalOpen(false)}
       />
     </>
   )
