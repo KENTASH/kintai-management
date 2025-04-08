@@ -1114,24 +1114,30 @@ export default function AttendanceDetailPage() {
                     </div>
 
                     <div className="divide-y divide-gray-100">
-                      {attendanceData?.expenses?.commuteExpenses?.map((expense) => (
-                        <div 
-                          key={expense.id} 
-                          className="grid grid-cols-8 gap-0 p-1.5 hover:bg-blue-50/50 items-center"
-                        >
-                          <div className="col-span-1 px-2 text-sm">{expense.date}</div>
-                          <div className="col-span-1 px-2 text-sm">{expense.transportation}</div>
-                          <div className="col-span-2 px-2 text-sm">{expense.from} → {expense.to}</div>
-                          <div className="col-span-1 px-2 text-sm">
-                            {commuteTypes.find(type => type.value === expense.expenseType)?.label || '不明'}
+                      {(attendanceData?.expenses?.commuteExpenses?.length ?? 0) > 0 ? (
+                        attendanceData?.expenses?.commuteExpenses?.map((expense) => (
+                          <div 
+                            key={expense.id} 
+                            className="grid grid-cols-8 gap-0 p-1.5 hover:bg-blue-50/50 items-center"
+                          >
+                            <div className="col-span-1 px-2 text-sm">{expense.date}</div>
+                            <div className="col-span-1 px-2 text-sm">{expense.transportation}</div>
+                            <div className="col-span-2 px-2 text-sm">{expense.from} → {expense.to}</div>
+                            <div className="col-span-1 px-2 text-sm">
+                              {commuteTypes.find(type => type.value === expense.expenseType)?.label || '不明'}
+                            </div>
+                            <div className="col-span-1 px-2 text-sm">
+                              {roundTripTypes.find(type => type.value === expense.roundTripType)?.label || '不明'}
+                            </div>
+                            <div className="col-span-1 px-2 text-sm">¥{expense.amount.toLocaleString()}</div>
+                            <div className="col-span-1 px-2 text-sm">{expense.remarks}</div>
                           </div>
-                          <div className="col-span-1 px-2 text-sm">
-                            {roundTripTypes.find(type => type.value === expense.roundTripType)?.label || '不明'}
-                          </div>
-                          <div className="col-span-1 px-2 text-sm">¥{expense.amount.toLocaleString()}</div>
-                          <div className="col-span-1 px-2 text-sm">{expense.remarks}</div>
+                        ))
+                      ) : (
+                        <div className="col-span-8 py-4 text-center text-gray-500">
+                          登録されている通勤費はありません
                         </div>
-                      ))}
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1155,24 +1161,30 @@ export default function AttendanceDetailPage() {
                     </div>
 
                     <div className="divide-y divide-gray-100">
-                      {attendanceData?.expenses?.businessExpenses?.map((expense) => (
-                        <div 
-                          key={expense.id} 
-                          className="grid grid-cols-8 gap-0 p-1.5 hover:bg-green-50/50 items-center"
-                        >
-                          <div className="col-span-1 px-2 text-sm">{expense.date}</div>
-                          <div className="col-span-1 px-2 text-sm">{expense.transportation}</div>
-                          <div className="col-span-2 px-2 text-sm">{expense.from} → {expense.to}</div>
-                          <div className="col-span-1 px-2 text-sm">
-                            {businessTypes.find(type => type.value === expense.expenseType)?.label || '不明'}
+                      {(attendanceData?.expenses?.businessExpenses?.length ?? 0) > 0 ? (
+                        attendanceData?.expenses?.businessExpenses?.map((expense) => (
+                          <div 
+                            key={expense.id} 
+                            className="grid grid-cols-8 gap-0 p-1.5 hover:bg-green-50/50 items-center"
+                          >
+                            <div className="col-span-1 px-2 text-sm">{expense.date}</div>
+                            <div className="col-span-1 px-2 text-sm">{expense.transportation}</div>
+                            <div className="col-span-2 px-2 text-sm">{expense.from} → {expense.to}</div>
+                            <div className="col-span-1 px-2 text-sm">
+                              {businessTypes.find(type => type.value === expense.expenseType)?.label || '不明'}
+                            </div>
+                            <div className="col-span-1 px-2 text-sm">
+                              {roundTripTypes.find(type => type.value === expense.roundTripType)?.label || '不明'}
+                            </div>
+                            <div className="col-span-1 px-2 text-sm">¥{expense.amount.toLocaleString()}</div>
+                            <div className="col-span-1 px-2 text-sm">{expense.remarks}</div>
                           </div>
-                          <div className="col-span-1 px-2 text-sm">
-                            {roundTripTypes.find(type => type.value === expense.roundTripType)?.label || '不明'}
-                          </div>
-                          <div className="col-span-1 px-2 text-sm">¥{expense.amount.toLocaleString()}</div>
-                          <div className="col-span-1 px-2 text-sm">{expense.remarks}</div>
+                        ))
+                      ) : (
+                        <div className="col-span-8 py-4 text-center text-gray-500">
+                          登録されている業務経費はありません
                         </div>
-                      ))}
+                      )}
                     </div>
                   </div>
                 </div>

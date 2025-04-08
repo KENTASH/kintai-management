@@ -115,43 +115,30 @@ export function DashboardContent() {
   const [isMonthlyReportModalOpen, setIsMonthlyReportModalOpen] = useState(false)
   const [isAttendanceHistoryModalOpen, setIsAttendanceHistoryModalOpen] = useState(false)
   const [todayAttendance, setTodayAttendance] = useState<any>(null)
+  const [userProfile, setUserProfile] = useState<any>(null)
 
   // 今日の勤怠データを取得する関数
   const fetchTodayAttendance = async () => {
-    if (typeof window !== 'undefined') {
-      try {
-        const userProfileStr = sessionStorage.getItem('userProfile')
-        if (!userProfileStr) {
-          console.error('ユーザープロファイルが見つかりません')
-          return
-        }
+    if (!session?.user?.id) return;
 
-        const userProfile = JSON.parse(userProfileStr)
-        const { id: userId, branch_code: branch } = userProfile
-
-        const response = await fetch('/api/attendance/today', {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        })
-
-        if (!response.ok) {
-          throw new Error('勤怠データの取得に失敗しました')
-        }
-
-        const data = await response.json()
-        setTodayAttendance(data)
-      } catch (error) {
-        console.error('勤怠データの取得中にエラーが発生:', error)
-        toast({
-          title: "エラー",
-          description: "勤怠データの取得に失敗しました",
-          variant: "destructive",
-        })
+    try {
+      const response = await fetch(`/api/attendance/today?userId=${userProfile?.employee_id}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || '勤怠データの取得に失敗しました');
       }
+
+      const data = await response.json();
+      setTodayAttendance(data);
+    } catch (error) {
+      console.error('勤怠データの取得中にエラーが発生:', error);
+      toast({
+        variant: "destructive",
+        description: error instanceof Error ? error.message : '勤怠データの取得に失敗しました',
+      });
     }
-  }
+  };
 
   // コンポーネントマウント時に今日の勤怠データを取得
   useEffect(() => {
@@ -167,6 +154,7 @@ export function DashboardContent() {
           if (userProfileStr) {
             const userProfile = JSON.parse(userProfileStr)
             setUserId(userProfile.id)
+            setUserProfile(userProfile)
           }
         } catch (e) {
           console.error('ユーザー情報の取得中にエラーが発生:', e)
@@ -352,66 +340,44 @@ export function DashboardContent() {
   
   // 出勤処理
   const handleCheckIn = async () => {
+    if (!session?.user?.id || !userProfile) return;
+
     try {
-      const userProfileStr = sessionStorage.getItem('userProfile')
-      if (!userProfileStr) {
-        toast({
-          title: 'エラー',
-          description: 'ユーザー情報が見つかりません',
-          variant: 'destructive',
-        })
-        return
-      }
-
-      const userProfile = JSON.parse(userProfileStr)
-      const { branch_code: branch, employee_id } = userProfile
-
-      if (!branch) {
-        toast({
-          title: 'エラー',
-          description: '所属部署が設定されていません',
-          variant: 'destructive',
-        })
-        return
-      }
-
-      const response = await fetch('/api/attendance/check-in', {
+      const response = await fetch('/api/attendance/today', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          userId: session?.user?.id,
-          branch,
-          employee_id,
+          userId: session.user.id,
+          branch: userProfile.branch_code,
+          employee_id: userProfile.employee_id,
         }),
-      })
+      });
+
+      const data = await response.json();
 
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || '出勤処理に失敗しました')
+        throw new Error(data.error || '出勤の記録に失敗しました');
       }
 
-      const result = await response.json()
+      toast({
+        description: "出勤を記録しました",
+      });
+
+      // モーダルを閉じる
+      setIsCheckInModalOpen(false);
       
-      // 出勤記録の取得を更新
-      await fetchTodayAttendance()
-
-      toast({
-        title: '出勤時刻を記録しました',
-        description: `${format(new Date(), 'HH:mm')}`,
-      })
-
-      setIsCheckInModalOpen(false)
+      // 勤怠データを再取得
+      fetchTodayAttendance();
     } catch (error) {
-      console.error('出勤処理中にエラーが発生しました:', error)
+      console.error('出勤記録中にエラーが発生:', error);
       toast({
-        title: 'エラー',
-        description: error instanceof Error ? error.message : '出勤処理に失敗しました',
-        variant: 'destructive',
-      })
+        variant: "destructive",
+        description: error instanceof Error ? error.message : '出勤の記録に失敗しました',
+      });
     }
-  }
+  };
   
   // 退勤処理
   const handleCheckOut = async (time: string) => {

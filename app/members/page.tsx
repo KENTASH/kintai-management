@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Users, Search, Save, Plus, Trash2, UserPlus, Mail, Ban, AlertCircle, CheckCircle2, Info, X } from "lucide-react"
+import { Users, Search, Save, Plus, Trash2, UserPlus, Mail, Ban, AlertCircle, CheckCircle2, Info, X, SearchX } from "lucide-react"
 import { useI18n } from "@/lib/i18n/context"
 import {
   AlertDialog,
@@ -1751,52 +1751,65 @@ export default function MembersPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody className="[&>tr>td]:px-1">
-                        {members.map((member) => (
-                          <TableRow key={member.id}>
-                            <TableCell className="py-1">{renderInputField(member, 'employee_id')}</TableCell>
-                            <TableCell className="py-1">{renderInputField(member, 'branch')}</TableCell>
-                            <TableCell className="py-1">{renderInputField(member, 'last_name')}</TableCell>
-                            <TableCell className="py-1">{renderInputField(member, 'first_name')}</TableCell>
-                            <TableCell className="py-1">{renderInputField(member, 'last_name_en')}</TableCell>
-                            <TableCell className="py-1">{renderInputField(member, 'first_name_en')}</TableCell>
-                            <TableCell className="py-1">{renderInputField(member, 'email')}</TableCell>
-                            <TableCell className="py-1">{renderInputField(member, 'leader')}</TableCell>
-                            <TableCell className="py-1">{renderInputField(member, 'subleader')}</TableCell>
-                            <TableCell className="py-1">{renderInputField(member, 'is_leader')}</TableCell>
-                            <TableCell className="py-1">{renderInputField(member, 'is_admin')}</TableCell>
-                            <TableCell className="py-1">{getStatusText(member.registration_status)}</TableCell>
-                            <TableCell className="py-1">
-                              {renderActionButtons(member)}
+                        {members.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={13}>
+                              <div className="py-2 text-center text-gray-500 flex items-center justify-center gap-2">
+                                <SearchX className="h-4 w-4" />
+                                検索結果がありません
+                              </div>
                             </TableCell>
                           </TableRow>
-                        ))}
+                        ) : (
+                          <>
+                            {members.map((member) => (
+                              <TableRow key={member.id}>
+                                <TableCell className="py-1">{renderInputField(member, 'employee_id')}</TableCell>
+                                <TableCell className="py-1">{renderInputField(member, 'branch')}</TableCell>
+                                <TableCell className="py-1">{renderInputField(member, 'last_name')}</TableCell>
+                                <TableCell className="py-1">{renderInputField(member, 'first_name')}</TableCell>
+                                <TableCell className="py-1">{renderInputField(member, 'last_name_en')}</TableCell>
+                                <TableCell className="py-1">{renderInputField(member, 'first_name_en')}</TableCell>
+                                <TableCell className="py-1">{renderInputField(member, 'email')}</TableCell>
+                                <TableCell className="py-1">{renderInputField(member, 'leader')}</TableCell>
+                                <TableCell className="py-1">{renderInputField(member, 'subleader')}</TableCell>
+                                <TableCell className="py-1">{renderInputField(member, 'is_leader')}</TableCell>
+                                <TableCell className="py-1">{renderInputField(member, 'is_admin')}</TableCell>
+                                <TableCell className="py-1">{getStatusText(member.registration_status)}</TableCell>
+                                <TableCell className="py-1">
+                                  {renderActionButtons(member)}
+                                </TableCell>
+                              </TableRow>
+                            ))}
 
-                        {editingMembers.map((member) => (
-                          <TableRow key={member.id}>
-                            <TableCell className="py-1">{renderInputField(member, 'employee_id')}</TableCell>
-                            <TableCell className="py-1">{renderInputField(member, 'branch')}</TableCell>
-                            <TableCell className="py-1">{renderInputField(member, 'last_name')}</TableCell>
-                            <TableCell className="py-1">{renderInputField(member, 'first_name')}</TableCell>
-                            <TableCell className="py-1">{renderInputField(member, 'last_name_en')}</TableCell>
-                            <TableCell className="py-1">{renderInputField(member, 'first_name_en')}</TableCell>
-                            <TableCell className="py-1">{renderInputField(member, 'email')}</TableCell>
-                            <TableCell className="py-1">{renderInputField(member, 'leader')}</TableCell>
-                            <TableCell className="py-1">{renderInputField(member, 'subleader')}</TableCell>
-                            <TableCell className="py-1">{renderInputField(member, 'is_leader')}</TableCell>
-                            <TableCell className="py-1">{renderInputField(member, 'is_admin')}</TableCell>
-                            <TableCell className="py-1">{getStatusText('00')}</TableCell>
-                            <TableCell className="py-1">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleRemoveRow(member.id)}
-                                className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                            {editingMembers.map((member) => (
+                              <TableRow key={member.id}>
+                                <TableCell className="py-1">{renderInputField(member, 'employee_id')}</TableCell>
+                                <TableCell className="py-1">{renderInputField(member, 'branch')}</TableCell>
+                                <TableCell className="py-1">{renderInputField(member, 'last_name')}</TableCell>
+                                <TableCell className="py-1">{renderInputField(member, 'first_name')}</TableCell>
+                                <TableCell className="py-1">{renderInputField(member, 'last_name_en')}</TableCell>
+                                <TableCell className="py-1">{renderInputField(member, 'first_name_en')}</TableCell>
+                                <TableCell className="py-1">{renderInputField(member, 'email')}</TableCell>
+                                <TableCell className="py-1">{renderInputField(member, 'leader')}</TableCell>
+                                <TableCell className="py-1">{renderInputField(member, 'subleader')}</TableCell>
+                                <TableCell className="py-1">{renderInputField(member, 'is_leader')}</TableCell>
+                                <TableCell className="py-1">{renderInputField(member, 'is_admin')}</TableCell>
+                                <TableCell className="py-1">{getStatusText('00')}</TableCell>
+                                <TableCell className="py-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleRemoveRow(member.id)}
+                                    className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </>
+                        )}
                       </TableBody>
                     </Table>
                   </div>
