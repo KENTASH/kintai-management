@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/use-toast"
@@ -73,39 +73,62 @@ export default function SetPasswordPage() {
   }
 
   return (
-    <div className="flex h-screen items-center justify-center">
-      <Card className="w-[400px]">
-        <CardHeader>
-          <CardTitle>パスワードの設定</CardTitle>
+    <div className="flex min-h-screen flex-col items-center justify-center bg-[#F8F9FE]">
+      <div className="flex items-center gap-2 mb-8">
+        <img src="@logo.png" alt="" className="h-5 w-5" />
+        <span className="text-[#4361ee] text-lg font-medium">勤怠管理システム</span>
+      </div>
+      <Card className="w-[400px] rounded-3xl shadow-[0_2px_10px_rgba(0,0,0,0.06)]">
+        <CardHeader className="bg-[#F8F9FE]/40 rounded-t-3xl border-b-0 pb-4 px-6 pt-5">
+          <CardTitle className="text-[17px] font-medium text-[#4361ee]">パスワードの設定</CardTitle>
+          <CardDescription className="text-[13px] text-[#6b7280] mt-0.5">
+            初回ログイン用のパスワードを設定してください。
+          </CardDescription>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Input
-                type="password"
-                placeholder="新しいパスワード"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Input
-                type="password"
-                placeholder="パスワードの確認"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-              />
-            </div>
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={isLoading}
-            >
-              {isLoading ? "設定中..." : "パスワードを設定"}
-            </Button>
-          </form>
+        <CardContent className="p-6 space-y-4">
+          <div>
+            <div className="text-[13px] font-medium text-[#1a1a1a] mb-1.5">新しいパスワード</div>
+            <Input
+              type="password"
+              placeholder="8文字以上の英数字"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="rounded-lg border-[#e5e7eb] focus:border-[#4361ee] focus:ring-[#4361ee] h-11 text-[13px] placeholder:text-[#9ca3af]"
+            />
+          </div>
+          <div>
+            <div className="text-[13px] font-medium text-[#1a1a1a] mb-1.5">パスワードの確認</div>
+            <Input
+              type="password"
+              placeholder="パスワードを再入力"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="rounded-lg border-[#e5e7eb] focus:border-[#4361ee] focus:ring-[#4361ee] h-11 text-[13px] placeholder:text-[#9ca3af]"
+            />
+          </div>
+          <div className="bg-[#F8F9FE]/60 rounded-lg p-4 space-y-1">
+            <div className="text-[13px] font-medium text-[#4361ee] mb-2">パスワードの要件：</div>
+            <ul className="space-y-1.5 text-[13px] text-[#6b7280]">
+              <li>• 8文字以上</li>
+              <li>• 大文字を含む</li>
+              <li>• 小文字を含む</li>
+              <li>• 数字を含む</li>
+              <li>• 特殊文字(@#$%^&*)を含む</li>
+            </ul>
+          </div>
+          <Button 
+            type="submit"
+            onClick={handleSubmit}
+            className="w-full bg-[#4361ee] hover:bg-[#3a51d4] rounded-lg h-11 text-[15px] font-medium mt-2" 
+            disabled={isLoading}
+          >
+            {isLoading ? "設定中..." : "パスワードを設定"}
+          </Button>
         </CardContent>
       </Card>
+      <div className="mt-8 text-sm text-[#6b7280]">
+        © NISZ HAMAMATSU 2025
+      </div>
     </div>
   )
 } 

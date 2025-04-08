@@ -329,12 +329,15 @@ export default function AttendanceDetailPage() {
       if (!attendanceData) return
 
       try {
+        // 月の最終日を計算
+        const lastDayOfMonth = new Date(attendanceData.year, attendanceData.month, 0).getDate()
+        
         const { data, error } = await supabase
           .from('holiday_master')
           .select('date, remarks')
           .eq('year', attendanceData.year)
           .gte('date', `${attendanceData.year}-${String(attendanceData.month).padStart(2, '0')}-01`)
-          .lte('date', `${attendanceData.year}-${String(attendanceData.month).padStart(2, '0')}-31`)
+          .lte('date', `${attendanceData.year}-${String(attendanceData.month).padStart(2, '0')}-${String(lastDayOfMonth).padStart(2, '0')}`)
 
         if (error) throw error
         setHolidays(data || [])

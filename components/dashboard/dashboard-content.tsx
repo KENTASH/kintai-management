@@ -116,6 +116,48 @@ export function DashboardContent() {
   const [isAttendanceHistoryModalOpen, setIsAttendanceHistoryModalOpen] = useState(false)
   const [todayAttendance, setTodayAttendance] = useState<any>(null)
 
+  // 今日の勤怠データを取得する関数
+  const fetchTodayAttendance = async () => {
+    if (typeof window !== 'undefined') {
+      try {
+        const userProfileStr = sessionStorage.getItem('userProfile')
+        if (!userProfileStr) {
+          console.error('ユーザープロファイルが見つかりません')
+          return
+        }
+
+        const userProfile = JSON.parse(userProfileStr)
+        const { id: userId, branch_code: branch } = userProfile
+
+        const response = await fetch('/api/attendance/today', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
+
+        if (!response.ok) {
+          throw new Error('勤怠データの取得に失敗しました')
+        }
+
+        const data = await response.json()
+        setTodayAttendance(data)
+      } catch (error) {
+        console.error('勤怠データの取得中にエラーが発生:', error)
+        toast({
+          title: "エラー",
+          description: "勤怠データの取得に失敗しました",
+          variant: "destructive",
+        })
+      }
+    }
+  }
+
+  // コンポーネントマウント時に今日の勤怠データを取得
+  useEffect(() => {
+    fetchTodayAttendance()
+  }, [])
+
   // セッションストレージからユーザー情報を取得
   useEffect(() => {
     const getUserFromSession = () => {
@@ -308,134 +350,65 @@ export function DashboardContent() {
     }
   }, [userId, selectedMonth])
   
-  // 今日の出勤記録を取得する関数
-  const fetchTodayAttendance = async () => {
-    if (!userId) return
-
-    try {
-      const userProfileStr = sessionStorage.getItem('userProfile')
-      if (!userProfileStr) return
-
-      const userProfile = JSON.parse(userProfileStr)
-      const { branch_code: branch, employee_id } = userProfile
-      const today = format(new Date(), 'yyyy-MM-dd')
-
-      const { data, error } = await supabase
-        .from('daily_attendances')
-        .select('*')
-        .eq('branch', branch)
-        .eq('employee_id', employee_id)
-        .eq('work_date', today)
-        .single()
-
-      if (error && error.code !== 'PGRST116') {
-        console.error('出勤記録の取得に失敗しました:', error)
-        return
-      }
-
-      setTodayAttendance(data)
-    } catch (error) {
-      console.error('出勤記録の取得中にエラーが発生しました:', error)
-    }
-  }
-
-  // コンポーネントマウント時とuserId変更時に出勤記録を取得
-  useEffect(() => {
-    fetchTodayAttendance()
-  }, [userId])
-
   // 出勤処理
-  const handleCheckIn = async (time: string) => {
-    if (!userId) {
-      console.error('ユーザーIDが設定されていません')
-      return
-    }
-
+  const handleCheckIn = async () => {
     try {
-      const now = new Date()
-      const today = format(now, 'yyyy-MM-dd')
-      
-      // セッションストレージからユーザー情報を取得
       const userProfileStr = sessionStorage.getItem('userProfile')
       if (!userProfileStr) {
-        console.error('ユーザープロファイルが見つかりません')
+        toast({
+          title: 'エラー',
+          description: 'ユーザー情報が見つかりません',
+          variant: 'destructive',
+        })
         return
       }
-      
+
       const userProfile = JSON.parse(userProfileStr)
       const { branch_code: branch, employee_id } = userProfile
 
       if (!branch) {
-        console.error('所属支店が設定されていません')
+        toast({
+          title: 'エラー',
+          description: '所属部署が設定されていません',
+          variant: 'destructive',
+        })
         return
       }
 
-      // 既存の出勤記録を確認
-      const { data: existingRecord, error: fetchError } = await supabase
-        .from('daily_attendances')
-        .select('*')
-        .eq('branch', branch)
-        .eq('employee_id', employee_id)
-        .eq('work_date', today)
-        .single()
-
-      if (fetchError && fetchError.code !== 'PGRST116') {
-        console.error('出勤記録の確認中にエラーが発生しました:', fetchError)
-        return
-      }
-
-      if (existingRecord) {
-        // 既に出勤記録が存在する場合は更新
-        const { error: updateError } = await supabase
-          .from('daily_attendances')
-          .update({
-            check_in: time,
-            updated_at: new Date().toISOString(),
-            updated_by: userId
-          })
-          .eq('id', existingRecord.id)
-
-        if (updateError) {
-          console.error('出勤時刻の更新に失敗しました:', updateError)
-          return
-        }
-      } else {
-        // 新規出勤記録を作成
-        const { error: insertError } = await supabase
-          .from('daily_attendances')
-          .insert({
-            branch,
-            employee_id,
-            work_date: today,
-            check_in: time,
-            created_by: userId,
-            updated_by: userId
-          })
-
-        if (insertError) {
-          console.error('出勤記録の作成に失敗しました:', insertError)
-          return
-        }
-      }
-
-      // 出勤記録を再取得
-      await fetchTodayAttendance()
-
-      // 成功メッセージを表示
-      toast({
-        title: "成功",
-        description: "出勤時刻を記録しました。",
-        duration: 3000,
-        variant: "default",
+      const response = await fetch('/api/attendance/check-in', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: session?.user?.id,
+          branch,
+          employee_id,
+        }),
       })
 
-    } catch (error) {
-      console.error('出勤時刻の登録に失敗しました:', error)
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || '出勤処理に失敗しました')
+      }
+
+      const result = await response.json()
+      
+      // 出勤記録の取得を更新
+      await fetchTodayAttendance()
+
       toast({
-        title: "エラー",
-        description: "出勤時刻の登録に失敗しました。",
-        variant: "destructive",
-        duration: 3000,
+        title: '出勤時刻を記録しました',
+        description: `${format(new Date(), 'HH:mm')}`,
+      })
+
+      setIsCheckInModalOpen(false)
+    } catch (error) {
+      console.error('出勤処理中にエラーが発生しました:', error)
+      toast({
+        title: 'エラー',
+        description: error instanceof Error ? error.message : '出勤処理に失敗しました',
+        variant: 'destructive',
       })
     }
   }
@@ -653,53 +626,53 @@ export function DashboardContent() {
 
   return (
     <>
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            <TrendingUp className="h-8 w-8 text-blue-600" />
-            {t("dashboard")}
-          </h1>
-          <p className="text-muted-foreground">
-            {t("dashboard-description")}
-          </p>
-        </div>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+          <TrendingUp className="h-8 w-8 text-blue-600" />
+          {t("dashboard")}
+        </h1>
+        <p className="text-muted-foreground">
+          {t("dashboard-description")}
+        </p>
+      </div>
 
         <div className="grid gap-4 md:grid-cols-3">
           {/* お知らせセクション */}
           <Card className="md:col-span-1 h-full flex flex-col">
             <CardHeader className="pb-2">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
                 <Bell className="h-6 w-6 text-blue-600" />
                 <CardTitle className="text-xl">{t("notifications")}</CardTitle>
-              </div>
-            </CardHeader>
+            </div>
+          </CardHeader>
             <CardContent className="flex-grow overflow-hidden">
               <ScrollArea className="h-full max-h-[calc(100vh-250px)] pr-4">
-                <div className="space-y-4">
-                  {publishedNotifications.map(notification => (
-                    <div key={notification.id} className="border-b pb-4">
-                      <div className="flex justify-between items-center mb-2">
+              <div className="space-y-4">
+                {publishedNotifications.map(notification => (
+                  <div key={notification.id} className="border-b pb-4">
+                    <div className="flex justify-between items-center mb-2">
                         <p className="font-medium text-base">{notification.title}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {format(new Date(notification.publishDate), 'yyyy/MM/dd')}
-                        </p>
-                      </div>
-                      <p className="text-sm whitespace-pre-wrap text-muted-foreground">
-                        {notification.content}
+                      <p className="text-sm text-muted-foreground">
+                        {format(new Date(notification.publishDate), 'yyyy/MM/dd')}
                       </p>
                     </div>
-                  ))}
-                </div>
-              </ScrollArea>
-            </CardContent>
-          </Card>
+                    <p className="text-sm whitespace-pre-wrap text-muted-foreground">
+                      {notification.content}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
 
           {/* 右側カラム（今日の勤怠と月間レポート） */}
           <div className="md:col-span-2 flex flex-col gap-4">
             {/* 今日の勤怠 */}
             <Card className="flex flex-col">
               <CardHeader className="pb-2">
-                <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
                   <Clock className="h-5 w-5 text-blue-600" />
                   <CardTitle className="text-xl">今日の勤怠</CardTitle>
                   <Button
@@ -711,9 +684,9 @@ export function DashboardContent() {
                   >
                     <ExternalLink className="h-4 w-4 text-blue-600" />
                   </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
+            </div>
+          </CardHeader>
+          <CardContent>
                 <div className="flex flex-col">
                   {/* 現在時刻表示、出勤時間、退勤時間を縦に並べる */}
                   <div className="grid grid-cols-3 gap-3 mb-3">
@@ -834,7 +807,7 @@ export function DashboardContent() {
                     >
                       <ChevronRight className="h-4 w-4" />
                     </Button>
-                  </div>
+              </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -949,12 +922,12 @@ export function DashboardContent() {
                         勤務記録がありません
                       </div>
                     )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
       </div>
 
       <CheckInModal

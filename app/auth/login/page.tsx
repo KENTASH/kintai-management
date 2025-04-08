@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -154,47 +155,72 @@ export default function LoginPage() {
   }, [router]);
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] items-center justify-center">
-      <Card className="w-[400px]">
-        <CardHeader>
-          <CardTitle>{t("login-title")}</CardTitle>
-          <CardDescription>{t("login-description")}</CardDescription>
+    <div className="flex min-h-screen flex-col items-center justify-center bg-[#F8F9FE]">
+      <div className="flex items-center gap-1 mb-8">
+        <Image
+          src="/logo.png"
+          alt=""
+          width={22}
+          height={22}
+          className="object-contain"
+          priority
+        />
+        <span className="text-[#2c4187] text-[19px] font-bold">勤怠管理システム</span>
+      </div>
+      <Card className="w-[400px] rounded-lg shadow-[0_4px_14px_rgba(0,0,0,0.1)]">
+        <CardHeader className="bg-gradient-to-b from-[#EEF2FF] to-[#F8FAFF] rounded-t-lg border-b pb-4">
+          <CardTitle className="text-lg font-medium text-[#2c4187]">ログイン</CardTitle>
+          <CardDescription className="text-sm text-[#666666] mt-1">
+            メールアドレスとパスワードを入力してログインしてください。
+          </CardDescription>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <Input 
-              type="email" 
-              placeholder={t("email-placeholder")} 
-              value={email} 
-              onChange={(e) => setEmail(e.target.value)} 
-            />
-            <div className="relative">
+        <CardContent className="p-6 bg-white rounded-b-lg">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="space-y-2">
+              <div className="text-sm font-medium text-[#1a1a1a] mb-1">メールアドレス</div>
               <Input 
-                type={showPassword ? "text" : "password"} 
-                placeholder={t("password-placeholder")} 
-                value={password} 
-                onChange={(e) => setPassword(e.target.value)} 
+                type="email" 
+                placeholder={t("email-placeholder")} 
+                value={email} 
+                onChange={(e) => setEmail(e.target.value)}
+                className="rounded-md border-[#e5e7eb] focus:border-blue-500 focus:ring-blue-500 placeholder:text-[#9ca3af]"
+                autoComplete="username"
               />
-              <button 
-                type="button" 
-                onClick={() => setShowPassword(!showPassword)} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-              >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
+            </div>
+            <div className="space-y-2">
+              <div className="text-sm font-medium text-[#1a1a1a] mb-1">パスワード</div>
+              <div className="relative">
+                <Input 
+                  type={showPassword ? "text" : "password"} 
+                  placeholder={t("password-placeholder")} 
+                  value={password} 
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="rounded-md border-[#e5e7eb] focus:border-blue-500 focus:ring-blue-500 placeholder:text-[#9ca3af]" 
+                  autoComplete="current-password"
+                />
+                <button 
+                  type="button" 
+                  onClick={() => setShowPassword(!showPassword)} 
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9ca3af] hover:text-[#666666]"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
             {error && <div className="text-sm text-red-500">{error}</div>}
             <Button 
               type="submit" 
-              className="w-full bg-blue-600 hover:bg-blue-700" 
+              className="w-full bg-[#2563eb] hover:bg-[#1d4ed8] rounded-md py-2.5 text-[15px] font-medium" 
               disabled={isLoading}
             >
-              <LogIn className="mr-2 h-4 w-4" />
               {isLoading ? "ログイン中..." : "ログイン"}
             </Button>
           </form>
         </CardContent>
       </Card>
+      <div className="mt-8 text-sm text-[#666666]">
+        © NISZ HAMAMATSU 2025
+      </div>
     </div>
   );
 }
