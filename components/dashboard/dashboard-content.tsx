@@ -30,11 +30,11 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/providers/AuthProvider"
+import { useToast } from "@/components/ui/use-toast"
 import { CheckInModal } from './check-in-modal'
 import { CheckOutModal } from './check-out-modal'
 import { MonthlyReportModal } from './monthly-report-modal'
 import { AttendanceHistoryModal } from './attendance-history-modal'
-import { useToast } from "@/components/ui/use-toast"
 
 // お知らせのデータ型定義
 interface Notification {
@@ -117,33 +117,73 @@ export function DashboardContent() {
   const [todayAttendance, setTodayAttendance] = useState<any>(null)
   const [userProfile, setUserProfile] = useState<any>(null)
 
-  // 今日の勤怠データを取得する関数
-  const fetchTodayAttendance = async () => {
-    if (!session?.user?.id) return;
+  // セッションの状態を監視
+  useEffect(() => {
+    console.log('セッション状態:', { 
+      session,
+      sessionStorage: {
+        userProfile: sessionStorage.getItem('userProfile'),
+        auth: sessionStorage.getItem('auth')
+      }
+    })
+    if (session?.user?.id) {
+      fetchTodayAttendance()
+    }
+  }, [session])
 
+  const fetchTodayAttendance = async () => {
     try {
-      const response = await fetch(`/api/attendance/today?userId=${userProfile?.employee_id}`);
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || '勤怠データの取得に失敗しました');
+      const userProfileStr = sessionStorage.getItem('userProfile')
+      console.log('セッションストレージのuserProfile (取得):', userProfileStr)
+
+      if (!userProfileStr) {
+        console.error('userProfile (取得) が見つかりません')
+        toast({
+          title: 'エラー',
+          description: 'ユーザー情報が取得できません。再度ログインしてください。',
+          variant: 'destructive',
+        })
+        return
       }
 
-      const data = await response.json();
-      setTodayAttendance(data);
-    } catch (error) {
-      console.error('勤怠データの取得中にエラーが発生:', error);
-      toast({
-        variant: "destructive",
-        description: error instanceof Error ? error.message : '勤怠データの取得に失敗しました',
-      });
-    }
-  };
+      const userProfile = JSON.parse(userProfileStr)
+      console.log('パース済みuserProfile (取得):', userProfile)
 
-  // コンポーネントマウント時に今日の勤怠データを取得
-  useEffect(() => {
-    fetchTodayAttendance()
-  }, [])
+      if (!userProfile.employee_id) {
+        console.error('employee_idが設定されていません:', userProfile)
+        toast({
+          title: 'エラー',
+          description: '従業員IDが設定されていません。',
+          variant: 'destructive',
+        })
+        return
+      }
+
+      const { employee_id } = userProfile
+      console.log('APIリクエスト送信:', {
+        url: `/api/attendance/today?employee_id=${employee_id}`,
+        employee_id
+      })
+
+      const response = await fetch(`/api/attendance/today?employee_id=${employee_id}`)
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || '勤怠データの取得に失敗しました')
+      }
+
+      const data = await response.json()
+      console.log('APIレスポンス:', data)
+
+      setTodayAttendance(data)
+    } catch (error) {
+      console.error('勤怠データ取得エラー:', error)
+      toast({
+        title: 'エラー',
+        description: error instanceof Error ? error.message : '勤怠データの取得に失敗しました',
+        variant: 'destructive',
+      })
+    }
+  }
 
   // セッションストレージからユーザー情報を取得
   useEffect(() => {
@@ -340,44 +380,73 @@ export function DashboardContent() {
   
   // 出勤処理
   const handleCheckIn = async () => {
-    if (!session?.user?.id || !userProfile) return;
-
     try {
+      const userProfileStr = sessionStorage.getItem('userProfile')
+      console.log('セッションストレージのuserProfile:', userProfileStr)
+
+      if (!userProfileStr) {
+        console.error('userProfileが見つかりません')
+        toast({
+          title: 'エラー',
+          description: 'ユーザー情報が取得できません。再度ログインしてください。',
+          variant: 'destructive',
+        })
+        return
+      }
+
+      const userProfile = JSON.parse(userProfileStr)
+      console.log('パース済みuserProfile:', userProfile)
+
+      const { branch_code: branch, employee_id } = userProfile
+      console.log('送信するデータ:', { 
+        branch,
+        employee_id
+      })
+
+      if (!branch || !employee_id) {
+        console.error('必要な情報が不足しています:', userProfile)
+        toast({
+          title: 'エラー',
+          description: 'ユーザー情報が不完全です。',
+          variant: 'destructive',
+        })
+        return
+      }
+
       const response = await fetch('/api/attendance/today', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          userId: session.user.id,
-          branch: userProfile.branch_code,
-          employee_id: userProfile.employee_id,
+          branch,
+          employee_id,
         }),
-      });
-
-      const data = await response.json();
+      })
 
       if (!response.ok) {
-        throw new Error(data.error || '出勤の記録に失敗しました');
+        const errorData = await response.json()
+        throw new Error(errorData.error || '出勤時刻の登録に失敗しました')
       }
 
-      toast({
-        description: "出勤を記録しました",
-      });
+      const data = await response.json()
+      console.log('APIレスポンス:', data)
 
-      // モーダルを閉じる
-      setIsCheckInModalOpen(false);
-      
-      // 勤怠データを再取得
-      fetchTodayAttendance();
-    } catch (error) {
-      console.error('出勤記録中にエラーが発生:', error);
+      await fetchTodayAttendance()
       toast({
-        variant: "destructive",
-        description: error instanceof Error ? error.message : '出勤の記録に失敗しました',
-      });
+        title: '出勤時刻を登録しました',
+        description: `${format(new Date(), 'HH:mm')}`,
+      })
+      setIsCheckInModalOpen(false)
+    } catch (error) {
+      console.error('出勤処理エラー:', error)
+      toast({
+        title: 'エラー',
+        description: error instanceof Error ? error.message : '出勤時刻の登録に失敗しました',
+        variant: 'destructive',
+      })
     }
-  };
+  }
   
   // 退勤処理
   const handleCheckOut = async (time: string) => {
