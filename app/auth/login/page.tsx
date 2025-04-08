@@ -156,17 +156,6 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-[#F8F9FE]">
-      <div className="flex items-center gap-1 mb-8">
-        <Image
-          src="/logo.png"
-          alt=""
-          width={22}
-          height={22}
-          className="object-contain"
-          priority
-        />
-        <span className="text-[#2c4187] text-[19px] font-bold">勤怠管理システム</span>
-      </div>
       <Card className="w-[400px] rounded-lg shadow-[0_4px_14px_rgba(0,0,0,0.1)]">
         <CardHeader className="bg-gradient-to-b from-[#EEF2FF] to-[#F8FAFF] rounded-t-lg border-b pb-4">
           <CardTitle className="text-lg font-medium text-[#2c4187]">ログイン</CardTitle>
